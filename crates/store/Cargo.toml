@@ -1,0 +1,14 @@
+[package]
+name = "ferrocord-store"
+description = "Normalized in-memory cache of Discord state, updated from gateway events"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ferrocord-model.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+chrono.workspace = true

@@ -1,0 +1,22 @@
+[package]
+name = "ferrocord-http"
+description = "Discord REST client with client fingerprinting, rate limiting and captcha/MFA hooks"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ferrocord-model.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+reqwest.workspace = true
+base64.workspace = true
+parking_lot.workspace = true
+uuid.workspace = true
+url.workspace = true
+iana-time-zone = "0.1"
+sys-locale = "0.3"

@@ -1,0 +1,28 @@
+# Build output
+/target/
+**/*.rs.bk
+*.pdb
+
+# Editors / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local runtime data — never commit tokens, caches or logs
+*.log
+/data/
+/cache/
+.env
+.env.*
+*.token
+api-token.txt
+
+# Reverse-engineering scratch (proprietary Discord assets must not be committed)
+/re/
+/scratch/
+*.asar

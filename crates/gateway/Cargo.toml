@@ -1,0 +1,20 @@
+[package]
+name = "ferrocord-gateway"
+description = "Discord gateway connection: zlib-stream transport, heartbeating, resume and reconnect"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ferrocord-model.workspace = true
+ferrocord-http.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+futures-util.workspace = true
+flate2.workspace = true
+rand.workspace = true

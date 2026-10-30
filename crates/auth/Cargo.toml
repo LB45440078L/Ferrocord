@@ -1,0 +1,26 @@
+[package]
+name = "ferrocord-auth"
+description = "Discord account login: password, MFA (TOTP/SMS/backup), QR remote auth and secure token storage"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ferrocord-model.workspace = true
+ferrocord-http.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+futures-util.workspace = true
+base64.workspace = true
+rand.workspace = true
+rsa.workspace = true
+sha2.workspace = true
+keyring = { version = "3", features = ["windows-native", "apple-native", "linux-native-sync-persistent", "crypto-rust"] }
+
+[dev-dependencies]
+rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs"] }

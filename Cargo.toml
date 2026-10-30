@@ -1,0 +1,64 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/model",
+    "crates/http",
+    "crates/gateway",
+    "crates/auth",
+    "crates/store",
+    "crates/core",
+    "crates/plugin",
+    "crates/api",
+    "crates/app",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "BSD-3-Clause"
+repository = "https://github.com/ferrocord/ferrocord"
+rust-version = "1.88"
+authors = ["Ferrocord contributors"]
+
+[workspace.dependencies]
+ferrocord-model = { path = "crates/model" }
+ferrocord-http = { path = "crates/http" }
+ferrocord-gateway = { path = "crates/gateway" }
+ferrocord-auth = { path = "crates/auth" }
+ferrocord-store = { path = "crates/store" }
+ferrocord-core = { path = "crates/core" }
+ferrocord-plugin = { path = "crates/plugin" }
+ferrocord-api = { path = "crates/api" }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net", "fs"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+reqwest = { version = "0.13", features = ["json", "query", "multipart", "gzip", "brotli", "zstd", "stream"] }
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
+url = "2"
+base64 = "0.22"
+bitflags = { version = "2", features = ["serde"] }
+parking_lot = "0.12"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
+rand = "0.8"
+uuid = { version = "1", features = ["v4"] }
+flate2 = "1"
+prost = "0.14"
+rsa = { version = "0.9", features = ["sha2"] }
+sha2 = "0.10"
+directories = "6"
+toml = "0.9"
+anyhow = "1"
+
+[profile.release]
+lto = "thin"
+codegen-units = 4
+strip = true
+opt-level = 3
+
+[profile.dev.package."*"]
+opt-level = 2
