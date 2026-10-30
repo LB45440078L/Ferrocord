@@ -87,6 +87,8 @@ pub struct Store {
     /// Members keyed by (guild, user).
     pub members: HashMap<(Snowflake, Snowflake), Member>,
     pub member_lists: HashMap<(Snowflake, String), MemberList>,
+    /// Member list id most recently updated per guild (the subscribed channel's list).
+    pub active_member_list: HashMap<Snowflake, String>,
     pub typing: HashMap<Snowflake, HashMap<Snowflake, Instant>>,
     pub voice_states: HashMap<Snowflake, VoiceState>,
     pub notes: HashMap<Snowflake, String>,
@@ -286,6 +288,7 @@ impl Store {
                     }
                 }
                 self.member_lists.entry((u.guild_id, u.id.clone())).or_default().apply(u);
+                self.active_member_list.insert(u.guild_id, u.id.clone());
             }
             Event::PresenceUpdate(p) => self.upsert_presence((**p).clone()),
             Event::RelationshipAdd(r) | Event::RelationshipUpdate(r) => {
@@ -885,6 +888,11 @@ impl Store {
             }
             None => vec![],
         }
+    }
+
+    pub fn member_list(&self, guild: Snowflake) -> Option<&MemberList> {
+        let id = self.active_member_list.get(&guild)?;
+        self.member_lists.get(&(guild, id.clone()))
     }
 
     pub fn friends(&self) -> Vec<&Relationship> {

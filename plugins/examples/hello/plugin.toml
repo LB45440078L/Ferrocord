@@ -1,0 +1,7 @@
+id = "hello"
+name = "Hello"
+version = "1.0.0"
+author = "Ferrocord contributors"
+description = "Adds a /hello command that sends a friendly greeting."
+entry = "main.lua"
+permissions = ["commands", "messages.send"]

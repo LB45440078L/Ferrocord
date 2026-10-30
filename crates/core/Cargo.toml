@@ -1,7 +1,23 @@
 [package]
 name = "ferrocord-core"
+description = "Ferrocord client orchestrator: session lifecycle, actions, events and the extension interface"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [dependencies]
+ferrocord-model.workspace = true
+ferrocord-http.workspace = true
+ferrocord-gateway.workspace = true
+ferrocord-auth.workspace = true
+ferrocord-store.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+parking_lot.workspace = true
+directories.workspace = true
+toml.workspace = true
+chrono.workspace = true
