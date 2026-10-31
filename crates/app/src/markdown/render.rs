@@ -204,13 +204,14 @@ impl<'a, 'b> Builder<'a, 'b> {
         let width = (ui.available_width() - indent).max(40.0);
         job.wrap.max_width = width;
         let galley = ui.ctx().fonts_mut(|f| f.layout_job(job));
-        let (rect, resp) = ui.allocate_exact_size(vec2(width, galley.size().y) + vec2(indent, 0.0), Sense::click());
+        // Click for links/mentions/spoilers, drag to select text (copy with Ctrl+C).
+        let (rect, resp) = ui.allocate_exact_size(vec2(width, galley.size().y) + vec2(indent, 0.0), Sense::click_and_drag());
         let origin = rect.min + vec2(indent, 0.0);
         if !ui.is_rect_visible(rect) {
             return None;
         }
+        egui::text_selection::LabelSelectionState::label_text_selection(ui, &resp, origin, galley.clone(), ctx.pal.text, Stroke::NONE);
         let painter = ui.painter();
-        painter.galley(origin, galley.clone(), ctx.pal.text);
 
         let glyph_rect = |i: usize| galley.pos_from_cursor(CCursor::new(i)).translate(origin.to_vec2());
 
@@ -292,7 +293,11 @@ impl<'a, 'b> Builder<'a, 'b> {
             Some(Span::Tooltip(t)) => {
                 resp.on_hover_text(t);
             }
-            None => {}
+            None => {
+                if resp.hovered() {
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::Text);
+                }
+            }
         }
         None
     }
@@ -382,30 +387,7 @@ fn render_blocks(ui: &mut Ui, blocks: &[Block], ctx: &MdCtx<'_>, indent: f32, ju
                 b.finish(ui, ind)
             }
             Block::Code { lang, code } => {
-                let mut copy = false;
-                egui::Frame::new()
-                    .fill(p.bg_elevated)
-                    .stroke(Stroke::new(1.0, p.border))
-                    .corner_radius(CornerRadius::same(6))
-                    .inner_margin(egui::Margin::symmetric(10, 8))
-                    .outer_margin(egui::Margin { left: indent as i8, top: 2, bottom: 2, right: 0 })
-                    .show(ui, |ui| {
-                        ui.set_width(ui.available_width());
-                        ui.horizontal(|ui| {
-                            if !lang.is_empty() {
-                                ui.label(egui::RichText::new(lang).small().color(p.text_faint));
-                            }
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                if ui.small_button("Copy").clicked() {
-                                    copy = true;
-                                }
-                            });
-                        });
-                        ui.add(egui::Label::new(egui::RichText::new(code).monospace().size(base * 0.88).color(p.text)).wrap());
-                    });
-                if copy {
-                    ui.ctx().copy_text(code.clone());
-                }
+                code_block(ui, lang, code, base, indent, p);
                 None
             }
             Block::Quote(inner) => {
@@ -426,6 +408,52 @@ fn render_blocks(ui: &mut Ui, blocks: &[Block], ctx: &MdCtx<'_>, indent: f32, ju
     }
     ui.spacing_mut().item_spacing.y = prev_spacing;
     action
+}
+
+/// A fenced code block: language label, copy button with feedback, highlighted
+/// and selectable code.
+fn code_block(ui: &mut Ui, lang: &str, code: &str, base: f32, indent: f32, p: &Palette) {
+    let copied_id = {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        (lang, code).hash(&mut h);
+        egui::Id::unique(("code_copied", h.finish()))
+    };
+    let now = ui.ctx().input(|i| i.time);
+    let copied_at: Option<f64> = ui.ctx().data(|d| d.get_temp(copied_id));
+    let copied = copied_at.is_some_and(|t| now - t < 1.5);
+    egui::Frame::new()
+        .fill(p.bg_elevated)
+        .stroke(Stroke::new(1.0, p.border))
+        .corner_radius(CornerRadius::same(6))
+        .inner_margin(egui::Margin { left: 12, right: 8, top: 6, bottom: 10 })
+        .outer_margin(egui::Margin { left: indent as i8, top: 2, bottom: 2, right: 0 })
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                let label = if lang.is_empty() { "code".to_string() } else { lang.to_lowercase() };
+                ui.label(egui::RichText::new(label).size(11.5).color(p.text_faint));
+                let lines = code.lines().count();
+                if lines > 3 {
+                    ui.label(egui::RichText::new(format!("· {lines} lines")).size(11.5).color(p.text_faint));
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let (text, color) = if copied { ("Copied!", p.success) } else { ("Copy", p.text_muted) };
+                    let r = ui.add(egui::Button::new(egui::RichText::new(text).size(12.0).color(color)).frame(false)).on_hover_text("Copy code");
+                    if r.clicked() {
+                        ui.ctx().copy_text(code.to_string());
+                        ui.ctx().data_mut(|d| d.insert_temp(copied_id, now));
+                    }
+                    if copied {
+                        ui.ctx().request_repaint_after(std::time::Duration::from_millis(250));
+                    }
+                });
+            });
+            ui.add_space(2.0);
+            let mut job = super::highlight::highlight(code, lang, base * 0.88, p);
+            job.wrap.max_width = ui.available_width();
+            ui.add(egui::Label::new(job).wrap().selectable(true));
+        });
 }
 
 /// Formats `<t:unix:style>` per Discord's styles. Returns (display, tooltip).

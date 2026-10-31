@@ -126,6 +126,7 @@ impl App {
         client.set_repaint(move || repaint_ctx.request_repaint());
         let images = ImageCache::new(ctx.clone(), client.http().raw_client().clone(), client.runtime().clone(), client.paths().media_cache());
         let events = client.subscribe();
+        crate::sounds::install(&client);
         let cfg = client.config();
         let pal = Palette::for_theme(cfg.appearance.theme, theme::parse_hex(&cfg.appearance.accent).unwrap_or(theme::hex(0x5865f2)));
 
@@ -258,8 +259,9 @@ impl App {
             }
             ClientEvent::Notification(n) => {
                 let cfg = self.client.config().notifications;
+                // Silent OS notification: the message/mention sound comes from `sounds`.
                 if cfg.desktop {
-                    crate::notify::show(&n, cfg.show_content, cfg.sound);
+                    crate::notify::show(&n, cfg.show_content, false);
                 }
             }
             ClientEvent::IncomingCall { channel_id } => {
@@ -274,7 +276,7 @@ impl App {
                         icon_url: None,
                     },
                     true,
-                    true,
+                    false, // `sounds` rings instead
                 );
             }
             ClientEvent::CallEnded { channel_id } => {
@@ -571,6 +573,7 @@ impl eframe::App for App {
             }
         }
         self.toasts_ui(&ctx);
+        crate::widgets::pointer_feedback(&ctx);
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {

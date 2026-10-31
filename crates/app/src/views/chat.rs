@@ -32,6 +32,8 @@ enum Act {
     Retry(String),
     Discard(String),
     LoadOlder,
+    Quote(String),
+    ShowHidden(Snowflake),
 }
 
 pub fn chat(app: &mut App, ui: &mut Ui, channel: Snowflake) {
@@ -170,18 +172,71 @@ fn build_rows(msgs: &[Message], marker: Option<Snowflake>) -> Vec<Row> {
     rows
 }
 
+/// Why a run of messages is collapsed.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Hidden {
+    Blocked,
+    Ignored,
+}
+
+/// For each row: `Some((first row id of the hidden run, run length, why))` when the
+/// author is blocked or ignored.
+fn hidden_runs(hidden: &[Option<Hidden>], rows: &[Row]) -> Vec<Option<(Snowflake, usize, Hidden)>> {
+    let mut out = vec![None; rows.len()];
+    let mut i = 0;
+    while i < rows.len() {
+        let Some(kind) = hidden[i] else {
+            i += 1;
+            continue;
+        };
+        let start = i;
+        while i < rows.len() && hidden[i].is_some() {
+            i += 1;
+        }
+        // A run that contains anyone blocked is labelled "blocked".
+        let kind = if hidden[start..i].contains(&Some(Hidden::Blocked)) { Hidden::Blocked } else { kind };
+        for slot in &mut out[start..i] {
+            *slot = Some((rows[start].id, i - start, kind));
+        }
+    }
+    out
+}
+
+fn shown_hidden_id(channel: Snowflake) -> egui::Id {
+    egui::Id::unique(("shown_hidden_runs", channel))
+}
+
 fn messages(app: &mut App, ui: &mut Ui, channel: Snowflake) {
     let pal = app.pal;
-    let (rows, reached_start, loading, n) = {
+    let (ignored, hide_blocked) = {
+        let cfg = app.client.config();
+        (cfg.privacy.ignored_users.iter().copied().collect::<HashSet<Snowflake>>(), cfg.privacy.hide_blocked_messages)
+    };
+    let (rows, reached_start, loading, n, hidden) = {
         let s = app.client.store();
         match s.messages.get(&channel) {
             Some(cm) => {
                 let marker = app.scroll.get(&channel).and_then(|sc| sc.unread_marker);
-                (build_rows(&cm.messages, marker), cm.reached_start, cm.loading, cm.messages.len())
+                let hidden: Vec<Option<Hidden>> = cm
+                    .messages
+                    .iter()
+                    .map(|m| {
+                        if s.is_blocked(m.author.id) {
+                            Some(Hidden::Blocked)
+                        } else if ignored.contains(&m.author.id) {
+                            Some(Hidden::Ignored)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                (build_rows(&cm.messages, marker), cm.reached_start, cm.loading, cm.messages.len(), hidden)
             }
-            None => (vec![], false, true, 0),
+            None => (vec![], false, true, 0, vec![]),
         }
     };
+    let runs = hidden_runs(&hidden, &rows);
+    let shown: HashSet<Snowflake> = ui.ctx().data(|d| d.get_temp(shown_hidden_id(channel))).unwrap_or_default();
     let mut acts: Vec<Act> = vec![];
     let (sc_offset, jump_to_bottom) = match app.scroll.get_mut(&channel) {
         Some(s) => (s.pending_offset.take(), std::mem::take(&mut s.scroll_to_bottom)),
@@ -210,8 +265,19 @@ fn messages(app: &mut App, ui: &mut Ui, channel: Snowflake) {
         }
         let mut first_visible: Option<(Snowflake, f32)> = None;
         let mut rendered = 0usize;
-        for row in &rows {
+        for (i, row) in rows.iter().enumerate() {
             let top = ui.cursor().min.y;
+            if let Some((first, count, kind)) = runs[i]
+                && !shown.contains(&first)
+            {
+                // Collapsed: one bar for the whole run (or nothing at all), no message bodies.
+                if !hide_blocked && first == row.id && hidden_bar(ui, &pal, count, kind) {
+                    acts.push(Act::ShowHidden(first));
+                }
+                let h = ui.cursor().min.y - top;
+                app.scroll.entry(channel).or_default().heights.insert(row.id, h);
+                continue;
+            }
             let cached = app.scroll.get(&channel).and_then(|sc| sc.heights.get(&row.id).copied());
             let content_top = top - ui.min_rect().min.y;
             let visible = cached.is_none_or(|h| content_top + h >= viewport.min.y - 200.0 && content_top <= viewport.max.y + 200.0);
@@ -262,13 +328,57 @@ fn messages(app: &mut App, ui: &mut Ui, channel: Snowflake) {
     }
     sc.anchor = out.inner;
 
+    if !sc.at_bottom && n > 0 {
+        jump_to_present(app, ui, out.inner_rect, channel);
+    }
+    let sc = app.scroll.entry(channel).or_default();
     if sc.at_bottom && ui.ctx().input(|i| i.viewport().focused.unwrap_or(true)) && !app.demo && app.client.config().privacy.auto_ack {
         let unread = app.client.store().is_unread(channel) || app.client.store().mention_count(channel) > 0;
         if unread {
             app.client.ack_channel(channel);
         }
     }
-    apply_acts(app, channel, acts);
+    apply_acts(app, &ui.ctx().clone(), channel, acts);
+}
+
+/// "3 blocked messages — Show" bar in place of a collapsed run. Returns true when clicked.
+fn hidden_bar(ui: &mut Ui, pal: &theme::Palette, count: usize, kind: Hidden) -> bool {
+    ui.add_space(4.0);
+    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 28.0), Sense::click());
+    let row = Rect::from_min_max(pos2(rect.min.x + GUTTER - 36.0, rect.min.y), pos2(rect.max.x - 16.0, rect.max.y));
+    if resp.hovered() {
+        ui.painter().rect_filled(row, CornerRadius::same(6), pal.bg_hover);
+    }
+    let (icon, what) = match kind {
+        Hidden::Blocked => (Icon::Shield, "blocked"),
+        Hidden::Ignored => (Icon::VolumeOff, "ignored"),
+    };
+    icons::paint_centered(ui, pos2(row.min.x + 14.0, row.center().y), 15.0, icon, pal.text_faint);
+    let label = if count == 1 { format!("1 {what} message") } else { format!("{count} {what} messages") };
+    let galley = ui.ctx().fonts_mut(|f| f.layout_no_wrap(label, FontId::proportional(13.5), pal.text_muted));
+    let w = galley.size().x;
+    ui.painter().galley(pos2(row.min.x + 30.0, row.center().y - galley.size().y / 2.0), galley, pal.text_muted);
+    let action = if count == 1 { "Show message" } else { "Show messages" };
+    ui.painter().text(pos2(row.min.x + 30.0 + w + 10.0, row.center().y), egui::Align2::LEFT_CENTER, action, FontId::new(13.5, theme::bold()), pal.link);
+    resp.clicked()
+}
+
+/// Bar at the bottom of the message list while you are scrolled up in history.
+fn jump_to_present(app: &mut App, ui: &mut Ui, view: Rect, channel: Snowflake) {
+    let pal = app.pal;
+    let bar = Rect::from_min_size(pos2(view.min.x + 16.0, view.max.y - 36.0), vec2((view.width() - 32.0).max(120.0), 28.0));
+    let resp = ui.interact(bar, egui::Id::unique(("jump_to_present", channel)), Sense::click());
+    let fill = if resp.hovered() { pal.accent.lerp_to_gamma(Color32::WHITE, 0.1) } else { pal.accent };
+    ui.painter().rect_filled(bar.expand(1.0), CornerRadius::same(9), Color32::from_black_alpha(60));
+    ui.painter().rect_filled(bar, CornerRadius::same(8), fill);
+    let font = FontId::new(13.0, theme::bold());
+    ui.painter().text(pos2(bar.min.x + 12.0, bar.center().y), egui::Align2::LEFT_CENTER, "You're viewing older messages", font.clone(), Color32::WHITE);
+    ui.painter().text(pos2(bar.max.x - 12.0, bar.center().y), egui::Align2::RIGHT_CENTER, "Jump to present \u{2193}", font, Color32::WHITE);
+    let esc = app.modal.is_none() && app.popup.is_none() && ui.input(|i| i.key_pressed(egui::Key::Escape));
+    if resp.on_hover_text("Or press Esc").clicked() || esc {
+        app.scroll.entry(channel).or_default().scroll_to_bottom = true;
+        ui.ctx().request_repaint();
+    }
 }
 
 /// Resets a persisted scroll state that holds a non-finite or absurd offset.
@@ -300,7 +410,7 @@ fn channel_intro(app: &App, ui: &mut Ui, channel: Snowflake) {
 }
 
 fn typing_line(app: &mut App, ui: &mut Ui, channel: Snowflake) {
-    let users = app.client.store_mut().typing_users(channel);
+    let users = app.client.typing_users_filtered(channel);
     let pal = app.pal;
     let text = {
         let s = app.client.store();
@@ -329,7 +439,35 @@ fn author_color(app: &App, guild: Option<Snowflake>, user: Snowflake) -> Color32
     guild.and_then(|g| app.client.store().member_color(g, user)).and_then(theme::role_color).unwrap_or(app.pal.text)
 }
 
+/// One message row. The row senses clicks for its context menu, but that sense is
+/// registered *below* everything inside it, so links, images, reactions and text
+/// selection keep working.
 fn message(app: &mut App, ui: &mut Ui, m: &Message, group_start: bool, acts: &mut Vec<Act>) {
+    let row = ui.scope_builder(egui::UiBuilder::new().id_salt(("msg", m.id)).sense(Sense::click()), |ui| message_body(app, ui, m, group_start, acts));
+    widgets::mark_passive(ui.ctx(), row.response.id);
+    if row.inner {
+        message_menu(app, &row.response, m, acts);
+    }
+}
+
+fn toolbar_id(message: Snowflake) -> egui::Id {
+    egui::Id::unique(("msg_toolbar", message))
+}
+
+/// Whether the pointer is over this message: over the row itself (and nothing
+/// layered above it), or over the row's own hover toolbar. Counting the toolbar
+/// keeps it open while the pointer moves onto it.
+fn message_hovered(ui: &Ui, rect: Rect, message: Snowflake) -> bool {
+    let Some(p) = ui.ctx().pointer_hover_pos() else { return false };
+    let top = ui.ctx().layer_id_at(p);
+    if top == Some(egui::LayerId::new(egui::Order::Foreground, toolbar_id(message))) {
+        return true;
+    }
+    top == Some(ui.layer_id()) && rect.contains(p) && ui.clip_rect().contains(p)
+}
+
+/// Draws the message; returns whether it gets a context menu.
+fn message_body(app: &mut App, ui: &mut Ui, m: &Message, group_start: bool, acts: &mut Vec<Act>) -> bool {
     let pal = app.pal;
     let guild = m.guild_id.or(app.nav.guild);
     let me = app.client.store().my_id();
@@ -348,11 +486,10 @@ fn message(app: &mut App, ui: &mut Ui, m: &Message, group_start: bool, acts: &mu
     if !m.is_regular() {
         system_message(app, ui, m, acts);
         let rect = Rect::from_min_max(pos2(ui.min_rect().min.x, row_top), pos2(ui.max_rect().max.x, ui.cursor().min.y));
-        let hover = ui.interact(rect, ui.scope_id().with(("msg", m.id)), Sense::hover()).hovered();
-        if hover {
+        if message_hovered(ui, rect, m.id) {
             ui.painter().set(bg_slot, egui::Shape::rect_filled(rect, CornerRadius::ZERO, pal.bg_hover));
         }
-        return;
+        return false;
     }
 
     let full_width = ui.available_width();
@@ -476,7 +613,7 @@ fn message(app: &mut App, ui: &mut Ui, m: &Message, group_start: bool, acts: &mu
 
     let rect = Rect::from_min_max(pos2(left, top), pos2(left + full_width, ui.cursor().min.y));
     let hover_rect = Rect::from_min_max(pos2(left, row_top - 2.0), rect.max);
-    let hovered = ui.rect_contains_pointer(hover_rect) && !matches!(app.popup, Some(Popup::EmojiPicker { .. }));
+    let hovered = message_hovered(ui, hover_rect, m.id) && !matches!(app.popup, Some(Popup::EmojiPicker { .. }));
     if mentioned {
         ui.painter().set(bg_slot, egui::Shape::rect_filled(hover_rect, CornerRadius::ZERO, pal.bg_mention));
         ui.painter().rect_filled(Rect::from_min_size(hover_rect.min, vec2(2.0, hover_rect.height())), CornerRadius::ZERO, pal.warning);
@@ -488,14 +625,10 @@ fn message(app: &mut App, ui: &mut Ui, m: &Message, group_start: bool, acts: &mu
         ui.painter().text(pos2(left + GUTTER / 2.0 + 4.0, row_top + 10.0), egui::Align2::CENTER_CENTER, ts, FontId::proportional(10.5), pal.text_faint);
     }
 
-    // Context menu on the whole message.
-    let resp = ui.interact(hover_rect, ui.scope_id().with(("msgctx", m.id)), Sense::click());
-    if pending.is_none() {
-        message_menu(app, &resp, m, acts);
-        if hovered {
-            toolbar(app, ui, hover_rect, m, acts);
-        }
+    if pending.is_none() && hovered {
+        toolbar(app, ui, hover_rect, m, acts);
     }
+    pending.is_none()
 }
 
 fn body(app: &mut App, ui: &mut Ui, m: &Message, guild: Option<Snowflake>, acts: &mut Vec<Act>, pending: Option<&PendingState>) {
@@ -553,7 +686,7 @@ fn body(app: &mut App, ui: &mut Ui, m: &Message, guild: Option<Snowflake>, acts:
         });
     }
     for a in &m.attachments {
-        attachment(app, ui, m.id, a, acts);
+        attachment(app, ui, m, a, acts);
     }
     for s in &m.sticker_items {
         let url = ferrocord_core::model::cdn::sticker(s.id, s.format_type);
@@ -587,16 +720,33 @@ fn body(app: &mut App, ui: &mut Ui, m: &Message, guild: Option<Snowflake>, acts:
     }
 }
 
-fn attachment(app: &App, ui: &mut Ui, msg: Snowflake, a: &Attachment, acts: &mut Vec<Act>) {
+/// Images in DMs from people who aren't your friends start blurred (Privacy setting).
+fn from_stranger(app: &App, m: &Message) -> bool {
+    if !app.client.config().privacy.blur_media_from_strangers {
+        return false;
+    }
+    let s = app.client.store();
+    let private = s.channels.get(&m.channel_id).is_some_and(|c| matches!(c.kind, ChannelType::Dm | ChannelType::GroupDm));
+    private && m.author.id != s.my_id() && !s.is_friend(m.author.id)
+}
+
+fn attachment(app: &App, ui: &mut Ui, m: &Message, a: &Attachment, acts: &mut Vec<Act>) {
     let pal = app.pal;
+    let msg = m.id;
     let inline_media = app.client.config().appearance.inline_media;
     if a.is_image() && inline_media {
         let (w, h) = (a.width.unwrap_or(400) as f32, a.height.unwrap_or(300) as f32);
-        let scale = (400.0 / w).min(320.0 / h).min(1.0);
+        let max = vec2(520.0f32.min(ui.available_width()), 380.0);
+        let scale = (max.x / w).min(max.y / h).min(1.0);
         let size = vec2((w * scale).max(16.0), (h * scale).max(16.0));
         let url = ferrocord_core::model::cdn::proxied_image(&a.proxy_url, (size.x * 2.0) as u32, (size.y * 2.0) as u32);
         let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
-        let spoiler = a.is_spoiler() && !app.spoilers.get(&msg).is_some_and(|s| s.contains(&(1000 + a.id.0 as usize % 1000)));
+        crate::probe::record(ui.ctx(), "attachment.image", rect);
+        let revealed = app.spoilers.get(&msg).is_some_and(|s| s.contains(&(1000 + a.id.0 as usize % 1000)));
+        let spoiler = a.is_spoiler() && !revealed;
+        let blurred = !spoiler && !revealed && from_stranger(app, m);
+        // A tiny version scaled up with linear filtering reads as a blur.
+        let url = if blurred { ferrocord_core::model::cdn::proxied_image(&a.proxy_url, 12, (12.0 * h / w).max(4.0) as u32) } else { url };
         match app.images.get(&url) {
             Some(img) => {
                 egui::Image::from_texture(egui::load::SizedTexture::new(img.texture, size)).corner_radius(CornerRadius::same(8)).paint_at(ui, rect);
@@ -622,8 +772,14 @@ fn attachment(app: &App, ui: &mut Ui, msg: Snowflake, a: &Attachment, acts: &mut
             ui.painter().rect_filled(rect, CornerRadius::same(8), pal.bg_elevated.gamma_multiply(0.97));
             ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, "SPOILER", FontId::new(13.0, theme::bold()), pal.text);
         }
+        if blurred {
+            let pill = Rect::from_center_size(rect.center(), vec2(150.0f32.min(rect.width() - 8.0), 30.0));
+            ui.painter().rect_filled(pill, CornerRadius::same(15), Color32::from_black_alpha(170));
+            ui.painter().text(pill.center(), egui::Align2::CENTER_CENTER, "Click to show image", FontId::new(12.5, theme::bold()), Color32::WHITE);
+            resp.clone().on_hover_text("Blurred because the sender isn't on your friends list (Settings > Privacy)");
+        }
         if resp.clicked() {
-            if spoiler {
+            if spoiler || blurred {
                 acts.push(Act::Spoiler(msg, 1000 + a.id.0 as usize % 1000));
             } else {
                 acts.push(Act::Image(ferrocord_core::model::cdn::proxied_image(&a.proxy_url, w.min(2048.0) as u32, h.min(2048.0) as u32), a.url.clone()));
@@ -905,9 +1061,11 @@ fn toolbar(app: &App, ui: &mut Ui, rect: Rect, m: &Message, acts: &mut Vec<Act>)
     if mine || can(app, m.channel_id, Permissions::MANAGE_MESSAGES) {
         buttons.push((Icon::Trash, "Delete", 3));
     }
-    let w = buttons.len() as f32 * 32.0 + 6.0;
+    let quick = quick_reactions(ui.ctx());
+    let w = (buttons.len() + quick.len()) as f32 * 32.0 + 6.0 + if quick.is_empty() { 0.0 } else { 7.0 };
     let bar = Rect::from_min_size(pos2(rect.max.x - w - 16.0, rect.min.y - 14.0), vec2(w, 32.0));
-    egui::Area::new(ui.scope_id().with(("toolbar", m.id))).fixed_pos(bar.min).order(egui::Order::Foreground).show(ui.ctx(), |ui| {
+    crate::probe::record(ui.ctx(), "message.toolbar", bar);
+    egui::Area::new(toolbar_id(m.id)).fixed_pos(bar.min).order(egui::Order::Foreground).show(ui.ctx(), |ui| {
         egui::Frame::new()
             .fill(pal.bg_side)
             .stroke(Stroke::new(1.0, pal.border))
@@ -916,6 +1074,35 @@ fn toolbar(app: &App, ui: &mut Ui, rect: Rect, m: &Message, acts: &mut Vec<Act>)
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 2.0;
+                    for e in &quick {
+                        let (r, resp) = ui.allocate_exact_size(Vec2::splat(30.0), Sense::click());
+                        if resp.hovered() {
+                            ui.painter().rect_filled(r, CornerRadius::same(6), pal.bg_selected);
+                        }
+                        let size = if resp.is_pointer_button_down_on() {
+                            17.0
+                        } else if resp.hovered() {
+                            22.0
+                        } else {
+                            20.0
+                        };
+                        match markdown::twemoji_url(e).and_then(|u| app.images.get(&u)) {
+                            Some(img) => {
+                                let uv = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
+                                ui.painter().image(img.texture, Rect::from_center_size(r.center(), Vec2::splat(size)), uv, Color32::WHITE);
+                            }
+                            None => {
+                                ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, e, FontId::proportional(size - 4.0), pal.text);
+                            }
+                        }
+                        if resp.on_hover_text(format!("React with {e}")).clicked() {
+                            acts.push(Act::React(m.id, PartialEmoji::unicode(e.clone())));
+                        }
+                    }
+                    if !quick.is_empty() {
+                        let (r, _) = ui.allocate_exact_size(vec2(3.0, 30.0), Sense::hover());
+                        ui.painter().vline(r.center().x, r.y_range().shrink(6.0), Stroke::new(1.0, pal.border));
+                    }
                     for (icon, tip, k) in buttons {
                         let r = widgets::icon_button(ui, icon, tip, &pal, false);
                         if r.clicked() {
@@ -930,6 +1117,37 @@ fn toolbar(app: &App, ui: &mut Ui, rect: Rect, m: &Message, acts: &mut Vec<Act>)
                 });
             });
     });
+}
+
+const RECENT_REACTIONS: usize = 3;
+
+fn recent_reactions_id() -> egui::Id {
+    egui::Id::unique("recent_reactions")
+}
+
+/// The reactions offered one-click in the hover toolbar: the last ones you used.
+fn quick_reactions(ctx: &egui::Context) -> Vec<String> {
+    ctx.data_mut(|d| d.get_persisted::<Vec<String>>(recent_reactions_id()))
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| ["\u{1f44d}", "\u{2764}\u{fe0f}", "\u{1f602}"].map(String::from).to_vec())
+}
+
+fn remember_reaction(ctx: &egui::Context, emoji: &str) {
+    let mut list = quick_reactions(ctx);
+    list.retain(|e| e != emoji);
+    list.insert(0, emoji.to_string());
+    list.truncate(RECENT_REACTIONS);
+    ctx.data_mut(|d| d.insert_persisted(recent_reactions_id(), list));
+}
+
+/// `> `-quotes a message for the composer, attributed to its author.
+fn quote_text(content: &str, author: &str) -> String {
+    let mut out: String = content.lines().map(|l| format!("> {l}\n")).collect();
+    if out.is_empty() {
+        out.push_str("> *(attachment)*\n");
+    }
+    out.push_str(&format!("> \u{2014} @{author}\n"));
+    out
 }
 
 fn message_menu(app: &App, resp: &egui::Response, m: &Message, acts: &mut Vec<Act>) {
@@ -947,6 +1165,10 @@ fn message_menu(app: &App, resp: &egui::Response, m: &Message, acts: &mut Vec<Ac
         }
         if widgets::menu_item(ui, Icon::Reply, "Reply", fg) {
             acts.push(Act::Reply(m.id));
+            ui.close();
+        }
+        if widgets::menu_item(ui, Icon::Megaphone, "Quote", fg) {
+            acts.push(Act::Quote(quote_text(&m.content, &m.author.username)));
             ui.close();
         }
         if mine && widgets::menu_item(ui, Icon::Pencil, "Edit message", fg) {
@@ -970,6 +1192,10 @@ fn message_menu(app: &App, resp: &egui::Response, m: &Message, acts: &mut Vec<Ac
             ui.ctx().copy_text(m.id.to_string());
             ui.close();
         }
+        if !mine && !app.demo {
+            ui.separator();
+            crate::views::safety::user_menu(ui, &app.client, m.author.id, &app.pal);
+        }
         if mine || can_manage {
             ui.separator();
             if widgets::menu_item(ui, Icon::Trash, "Delete message", app.pal.danger) {
@@ -980,7 +1206,7 @@ fn message_menu(app: &App, resp: &egui::Response, m: &Message, acts: &mut Vec<Ac
     });
 }
 
-fn apply_acts(app: &mut App, channel: Snowflake, acts: Vec<Act>) {
+fn apply_acts(app: &mut App, ctx: &egui::Context, channel: Snowflake, acts: Vec<Act>) {
     for a in acts {
         match a {
             Act::Reply(id) => {
@@ -997,10 +1223,22 @@ fn apply_acts(app: &mut App, channel: Snowflake, acts: Vec<Act>) {
             }
             Act::Delete(id) => app.modal = Some(Modal::ConfirmDelete { channel, message: id }),
             Act::React(id, e) => {
+                if let (None, Some(name)) = (e.id, e.name.as_deref()) {
+                    remember_reaction(ctx, name);
+                }
                 if app.demo {
                     continue;
                 }
                 app.client.toggle_reaction(channel, id, e);
+            }
+            Act::Quote(text) => {
+                let c = app.composers.entry(channel).or_default();
+                c.editing = None;
+                if !c.text.is_empty() && !c.text.ends_with('\n') {
+                    c.text.push('\n');
+                }
+                c.text.push_str(&text);
+                ctx.memory_mut(|m| m.request_focus(egui::Id::unique(("composer", channel))));
             }
             Act::Picker(id, at) => app.popup = Some(Popup::EmojiPicker { target: EmojiTarget::Reaction(channel, id), at }),
             Act::Profile(user, at) => app.popup = Some(Popup::Profile { user, guild: app.nav.guild, at }),
@@ -1017,6 +1255,10 @@ fn apply_acts(app: &mut App, channel: Snowflake, acts: Vec<Act>) {
             }
             Act::Image(url, open) => app.modal = Some(Modal::ImageViewer { url, open_url: open }),
             Act::Pin(id, pin) => app.client.set_pinned(channel, id, pin),
+            Act::ShowHidden(first) => {
+                let id = shown_hidden_id(channel);
+                ctx.data_mut(|d| d.get_temp_mut_or_default::<HashSet<Snowflake>>(id).insert(first));
+            }
             Act::Spoiler(id, idx) => {
                 app.spoilers.entry(id).or_default().insert(idx);
             }

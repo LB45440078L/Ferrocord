@@ -8,6 +8,7 @@ use crate::theme;
 use crate::widgets;
 
 pub fn show(app: &mut App, ctx: &egui::Context) {
+    crate::views::safety::link_confirm(app, ctx);
     let Some(popup) = app.popup.take() else { return };
     let keep = match &popup {
         Popup::Profile { user, guild, at } => profile(app, ctx, *user, *guild, *at),
@@ -118,10 +119,13 @@ fn profile(app: &mut App, ctx: &egui::Context, user: Snowflake, guild: Option<Sn
                             app.open_dm_with(user);
                             keep = false;
                         }
-                        if ui.button("Copy ID").clicked() {
+                        if ui.button("Copy user ID").clicked() {
                             ui.ctx().copy_text(user.to_string());
                         }
                     });
+                    if user != me && !app.demo {
+                        ui.horizontal(|ui| crate::views::safety::profile_buttons(ui, &app.client, user, &pal));
+                    }
                 });
             },
         );

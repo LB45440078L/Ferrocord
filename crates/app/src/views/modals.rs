@@ -1,6 +1,6 @@
 //! Modal dialogs.
 
-use egui::{CornerRadius, FontId, RichText, Vec2, vec2};
+use egui::{CornerRadius, FontId, RichText, vec2};
 use ferrocord_core::model::{ChannelType, Snowflake};
 
 use crate::app::{App, Modal};
@@ -86,34 +86,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
             Modal::ConfirmDelete { channel, message }
         }
         Modal::ImageViewer { url, open_url } => {
-            let r = egui::Modal::new(egui::Id::unique("image_viewer")).frame(egui::Frame::NONE).backdrop_color(egui::Color32::from_black_alpha(200)).show(
-                ctx,
-                |ui| {
-                    let screen = ctx.content_rect().size() * 0.85;
-                    match app.images.get(&url) {
-                        Some(img) => {
-                            let resp = ui.add(egui::Image::from_texture(img.sized(screen)).sense(egui::Sense::click()));
-                            if resp.clicked() {
-                                keep = false;
-                            }
-                        }
-                        None => {
-                            ui.add_sized(Vec2::splat(120.0), egui::Spinner::new());
-                        }
-                    }
-                    ui.horizontal(|ui| {
-                        if ui.link(RichText::new("Open original").color(egui::Color32::WHITE)).clicked() {
-                            crate::views::open_link(app, &open_url);
-                        }
-                        if ui.link(RichText::new("Copy link").color(egui::Color32::WHITE)).clicked() {
-                            ctx.copy_text(open_url.clone());
-                        }
-                    });
-                },
-            );
-            if r.should_close() {
-                keep = false;
-            }
+            keep = crate::views::image_viewer::show(app, ctx, &url, &open_url);
             Modal::ImageViewer { url, open_url }
         }
         Modal::Pins { channel, messages } => {

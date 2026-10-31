@@ -467,6 +467,10 @@ impl Client {
         if m.author.id == store.my_id() || m.author.id.0 == 0 {
             return None;
         }
+        // Blocked and ignored users never notify, mentions included.
+        if store.is_blocked(m.author.id) || self.is_ignored(m.author.id) {
+            return None;
+        }
         let focused = *self.inner.focused_channel.read() == Some(m.channel_id) && *self.inner.window_focused.read();
         if focused {
             return None;
@@ -918,6 +922,96 @@ impl Client {
                 client.fail("mute_channel", e);
             }
         });
+    }
+
+    // ------------------------------------------------------------ safety
+
+    /// Blocks a user. Blocking a friend replaces the friendship (Discord does the same server-side).
+    pub fn block_user(&self, user: Snowflake) {
+        let previous = {
+            let mut s = self.inner.store.write();
+            if s.is_blocked(user) {
+                return;
+            }
+            let rel = Relationship { id: user, kind: RelationshipType::Blocked, user_id: Some(user), ..Default::default() };
+            s.relationships.insert(user, rel)
+        };
+        self.repaint();
+        let client = self.clone();
+        self.inner.rt.spawn(async move {
+            if let Err(e) = client.inner.http.block_user(user).await {
+                {
+                    let mut s = client.inner.store.write();
+                    if s.is_blocked(user) {
+                        match previous {
+                            Some(p) => s.relationships.insert(user, p),
+                            None => s.relationships.remove(&user),
+                        };
+                    }
+                }
+                client.fail("block_user", e);
+            }
+        });
+    }
+
+    /// Unblocks a user. Does nothing unless the relationship is `Blocked`.
+    pub fn unblock_user(&self, user: Snowflake) {
+        let previous = {
+            let mut s = self.inner.store.write();
+            if !s.is_blocked(user) {
+                return;
+            }
+            s.relationships.remove(&user)
+        };
+        self.repaint();
+        let client = self.clone();
+        self.inner.rt.spawn(async move {
+            if let Err(e) = client.inner.http.remove_relationship(user).await {
+                {
+                    let mut s = client.inner.store.write();
+                    if let Some(p) = previous
+                        && !s.relationships.contains_key(&user)
+                    {
+                        s.relationships.insert(user, p);
+                    }
+                }
+                client.fail("unblock_user", e);
+            }
+        });
+    }
+
+    /// Whether `user` is ignored on this device (`privacy.ignored_users`).
+    pub fn is_ignored(&self, user: Snowflake) -> bool {
+        self.inner.config.read().privacy.ignored_users.contains(&user)
+    }
+
+    /// Ignores or stops ignoring a user on this device only (no API call); persisted in the config.
+    pub fn set_ignored(&self, user: Snowflake, ignored: bool) {
+        if self.is_ignored(user) == ignored {
+            return;
+        }
+        self.update_config(|c| {
+            let list = &mut c.privacy.ignored_users;
+            if ignored {
+                list.push(user);
+            } else {
+                list.retain(|u| *u != user);
+            }
+        });
+        self.repaint();
+    }
+
+    /// Blocked (server-side) or ignored (this device): their messages and notifications are suppressed.
+    pub fn is_blocked_or_ignored(&self, user: Snowflake) -> bool {
+        self.inner.store.read().is_blocked(user) || self.is_ignored(user)
+    }
+
+    /// Users typing in a channel, minus blocked (already filtered by the store) and ignored users.
+    pub fn typing_users_filtered(&self, channel: Snowflake) -> Vec<Snowflake> {
+        let mut users = self.inner.store.write().typing_users(channel);
+        let cfg = self.inner.config.read();
+        users.retain(|u| !cfg.privacy.ignored_users.contains(u));
+        users
     }
 
     /// Runs any async closure on the client runtime, reporting failures as events.

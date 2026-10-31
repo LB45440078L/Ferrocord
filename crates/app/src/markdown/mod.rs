@@ -1,5 +1,7 @@
-//! Discord markdown: parsing ([`mod@parse`]) and egui rendering ([`mod@render`]).
+//! Discord markdown: parsing ([`mod@parse`]), egui rendering ([`mod@render`]) and
+//! code block colours ([`mod@highlight`]).
 
+pub mod highlight;
 pub mod parse;
 pub mod render;
 

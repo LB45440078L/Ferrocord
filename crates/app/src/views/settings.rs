@@ -244,8 +244,26 @@ fn notifications(app: &mut App, ui: &mut Ui) {
             pal.text_faint,
         );
         changed |= toggle(ui, &mut cfg.show_content, "Show message content", "Include message text in notifications.", pal.text_faint);
-        changed |= toggle(ui, &mut cfg.sound, "Notification sound", "", pal.text_faint);
         changed |= toggle(ui, &mut cfg.taskbar_badge, "Unread count in window title", "", pal.text_faint);
+    });
+    let mut test = false;
+    card(ui, &pal, |ui| {
+        widgets::section_label(ui, "Sounds", &pal);
+        changed |= toggle(ui, &mut cfg.sound, "Notification sound", "Play a sound for new messages, mentions and DMs.", pal.text_faint);
+        changed |= toggle(
+            ui,
+            &mut cfg.voice_sounds,
+            "Voice and call sounds",
+            "Mute, deafen, camera, and people joining or leaving your voice channel.",
+            pal.text_faint,
+        );
+        changed |= toggle(ui, &mut cfg.call_ring, "Ring for incoming calls", "", pal.text_faint);
+        ui.add_space(4.0);
+        widgets::section_label(ui, "Sound volume", &pal);
+        ui.horizontal(|ui| {
+            changed |= ui.add(egui::Slider::new(&mut cfg.sound_volume, 0.0..=1.0).custom_formatter(|v, _| format!("{:.0}%", v * 100.0))).changed();
+            test = ui.button("Test").clicked();
+        });
     });
     ui.label(
         RichText::new("Per-server and per-channel notification levels follow your Discord settings (right-click a server or channel to mute).")
@@ -254,6 +272,9 @@ fn notifications(app: &mut App, ui: &mut Ui) {
     );
     if changed {
         app.client.update_config(|c| c.notifications = cfg);
+    }
+    if test {
+        crate::sounds::preview(&app.client, crate::sounds::Sound::Mention);
     }
 }
 
@@ -264,6 +285,55 @@ fn privacy(app: &mut App, ui: &mut Ui) {
     card(ui, &pal, |ui| {
         changed |= toggle(ui, &mut cfg.send_typing, "Send typing indicators", "Let others see when you're typing.", pal.text_faint);
         changed |= toggle(ui, &mut cfg.auto_ack, "Mark channels as read automatically", "When off, use Esc or right-click → Mark as read.", pal.text_faint);
+    });
+    card(ui, &pal, |ui| {
+        widgets::section_label(ui, "Safety", &pal);
+        changed |= toggle(
+            ui,
+            &mut cfg.hide_blocked_messages,
+            "Hide messages from blocked users",
+            "When off, they're collapsed behind a \"Show\" bar instead.",
+            pal.text_faint,
+        );
+        changed |= toggle(
+            ui,
+            &mut cfg.blur_media_from_strangers,
+            "Blur media from people who aren't friends",
+            "Images in DMs and group DMs stay blurred until you click them.",
+            pal.text_faint,
+        );
+        changed |= toggle(ui, &mut cfg.confirm_external_links, "Confirm before opening links", "Ask before opening websites outside Discord.", pal.text_faint);
+    });
+    card(ui, &pal, |ui| {
+        widgets::section_label(ui, "Ignored users", &pal);
+        ui.label(RichText::new(crate::views::safety::IGNORE_HINT).size(12.5).color(pal.text_faint));
+        ui.add_space(6.0);
+        if cfg.ignored_users.is_empty() {
+            ui.label(RichText::new("Nobody. Right-click a user → Ignore.").color(pal.text_muted));
+        }
+        let rows: Vec<(ferrocord_core::model::Snowflake, String, String)> = {
+            let s = app.client.store();
+            cfg.ignored_users
+                .iter()
+                .map(|u| {
+                    let avatar = s.user(*u).map(|x| x.avatar_url(64)).unwrap_or_else(|| ferrocord_core::model::cdn::default_avatar(*u, "0"));
+                    (*u, s.display_name(None, *u), avatar)
+                })
+                .collect()
+        };
+        for (id, name, avatar) in rows {
+            ui.horizontal(|ui| {
+                widgets::avatar(ui, &app.images, &avatar, 24.0, None, &pal);
+                ui.label(RichText::new(name).size(14.0));
+                ui.label(RichText::new(id.to_string()).size(12.0).color(pal.text_faint));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("Stop ignoring").clicked() {
+                        cfg.ignored_users.retain(|u| *u != id);
+                        changed = true;
+                    }
+                });
+            });
+        }
     });
     card(ui, &pal, |ui| {
         widgets::section_label(ui, "Your data", &pal);

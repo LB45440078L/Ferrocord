@@ -145,6 +145,13 @@ pub fn populate(client: &Client) {
             json!({}),
         ),
         msg(mid(1498, 0), GENERAL, alice.clone(), "```rust\nfn main() {\n    println!(\"Hello from Ferrocord!\");\n}\n```", json!({})),
+        msg(
+            mid(61, 0),
+            GENERAL,
+            ferris.clone(),
+            "Code blocks are highlighted for many languages:\n```java\n@Override\npublic String greet(String name) {\n    return \"Hello, \" + name + \"!\"; // 👋\n}\n```\n```py\ndef greet(name: str) -> str:\n    return f\"Hello, {name}!\"  # 👋\n```",
+            json!({}),
+        ),
         msg(mid(60, 0), GENERAL, bob.clone(), "Is it fast? 🤔", json!({})),
         msg(
             mid(59, 0),
@@ -183,6 +190,13 @@ pub fn populate(client: &Client) {
             ferris.clone(),
             "Wrap it in `Arc<Mutex<T>>`, or use channels:\n```rust\nlet (tx, rx) = std::sync::mpsc::channel();\n```",
             json!({}),
+        ),
+        msg(
+            mid(29, 0),
+            RUST,
+            bob.clone(),
+            "Unrelated, but look at this sunset 🌅 (click to zoom)",
+            json!({ "attachments": [{ "id": sid(9001), "filename": "sunset.png", "size": 482_113, "url": "demo://sunset.png", "proxy_url": "demo://sunset.png", "width": 1600, "height": 900, "content_type": "image/png" }] }),
         ),
     ];
     let announce = vec![msg(mid(600, 0), ANNOUNCE, alice.clone(), "📢 Ferrocord **0.1** is out! Grab it from the releases page.", json!({}))];

@@ -5,9 +5,11 @@ pub mod chat;
 pub mod forum;
 pub mod friends;
 pub mod guilds;
+pub mod image_viewer;
 pub mod members;
 pub mod modals;
 pub mod popups;
+pub mod safety;
 pub mod settings;
 pub mod voice;
 
@@ -16,7 +18,8 @@ use ferrocord_core::model::Snowflake;
 use crate::app::{App, Modal};
 
 /// Opens a link: Discord message/channel links and invites are handled in-app,
-/// everything else goes to the system browser.
+/// everything else goes to the system browser (after a confirmation unless
+/// `privacy.confirm_external_links` is off).
 pub fn open_link(app: &mut App, url: &str) {
     let lower = url.to_ascii_lowercase();
     for prefix in ["https://discord.com/channels/", "https://canary.discord.com/channels/", "https://ptb.discord.com/channels/"] {
@@ -41,12 +44,9 @@ pub fn open_link(app: &mut App, url: &str) {
             return;
         }
     }
-    app.client.runtime().spawn_blocking({
-        let url = url.to_string();
-        move || {
-            if let Err(e) = open::that_detached(&url) {
-                tracing::warn!(error = %e, "failed to open browser");
-            }
-        }
-    });
+    if app.client.config().privacy.confirm_external_links && !safety::is_trusted_link(url) {
+        safety::ask_open_link(url);
+    } else {
+        safety::open_in_browser(&app.client, url);
+    }
 }

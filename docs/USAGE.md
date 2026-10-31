@@ -113,7 +113,7 @@ Out* (in Settings) revokes the token server-side and removes it locally.
 | Server rail (far left) | Home/DMs button, your servers and folders. A white pill marks unread servers; red badges count mentions. Right-click a server for *Mark as read*, *Mute* and *Leave*. |
 | Sidebar | Channel tree (categories collapse when clicked) or, on Home, Friends and your DMs. Right-click a channel for *Mark as read*, *Mute* and *Copy link*. |
 | Account panel | Click your name to change status or set a custom status. ⚙ opens Settings. |
-| Chat | Hover a message for quick actions (react, reply, edit, delete). Right-click for more (pin, copy text/link/ID). Click avatars or names for profiles. |
+| Chat | Hover a message for quick actions: your three most recent reactions in one click, react, reply, edit, delete. Right-click for more (quote, pin, copy text/link/ID, block or ignore the author). Click avatars or names for profiles. |
 | Header | 🔍 search, 📌 pinned messages, 👥 toggle the member list. |
 
 ### Composer
@@ -126,13 +126,50 @@ Out* (in Settings) revokes the token server-side and removes it locally.
 - Built-in commands: `/shrug`, `/tableflip`, `/unflip`, `/lenny`, `/me`,
   `/spoiler` and `/nick`. Plugins can add more.
 
+### Messages
+
+- **Select and copy text**: drag across one or several messages, then `Ctrl+C`.
+  Code blocks have a **Copy** button.
+- **Code blocks** are colour-highlighted when they name a language
+  (```` ```java ````, ```` ```py ````, ```` ```rust ````, `js`/`ts`, `c`/`cpp`, `cs`, `go`,
+  `kotlin`, `swift`, `php`, `ruby`, `lua`, `sql`, `bash`/`powershell`, `json`,
+  `yaml`/`toml`/`ini`, `html`/`xml`, `css`, `diff` and more).
+- **Images**: click to open the viewer. Scroll or `+`/`-` to zoom (around the
+  pointer), drag to pan, double-click for actual size, `0` to fit, `Esc` to close.
+  The viewer can also open, copy or save the original.
+- **Links** open in your browser; Ferrocord asks first for sites outside Discord
+  (turn that off in Settings → Privacy, or tick *Don't ask again*).
+- **Quote** (right-click a message) copies it into the composer as a `>` quote.
+- When you scroll up, a **Jump to present** bar takes you back down (or press `Esc`).
+
+### Sounds
+
+Ferrocord plays short sounds for new messages and mentions, muting and
+deafening, joining and leaving voice, people joining or leaving your voice
+channel, turning the camera on or off, and incoming calls. Settings →
+Notifications has separate switches for message sounds, voice and call sounds and
+the ringtone, plus a volume slider with a *Test* button. Sounds use the output
+device chosen in Voice & Video.
+
+### Safety
+
+- **Block** (right-click a message or member, or from a profile): Discord stops
+  them from messaging you, and their messages are collapsed behind
+  *"N blocked messages — Show"*. Unblock from the same menus or Friends → Blocked.
+- **Ignore** works only on this device and tells nobody: their messages are
+  collapsed, and they no longer trigger notifications, sounds or the typing indicator.
+  Manage the list in Settings → Privacy.
+- Settings → Privacy → Safety also lets you hide blocked messages completely, blur
+  images in DMs from people who aren't your friends (click to show), and confirm
+  before opening links outside Discord.
+
 ### Keyboard shortcuts
 
 | Shortcut | Action |
 |---|---|
 | `Ctrl+K` | Quick switcher (jump to any channel or DM) |
 | `Alt+↑` / `Alt+↓` | Previous / next channel |
-| `Esc` | Close popup/modal; otherwise mark the channel read and cancel reply/edit |
+| `Esc` | Close popup/modal/image viewer; otherwise jump to the newest messages, mark the channel read and cancel reply/edit |
 | `Ctrl` + `+` / `-` / `0` | Zoom in / out / reset |
 
 ## Settings

@@ -11,6 +11,7 @@ mod login;
 mod markdown;
 mod notify;
 mod probe;
+mod sounds;
 mod theme;
 mod views;
 mod widgets;

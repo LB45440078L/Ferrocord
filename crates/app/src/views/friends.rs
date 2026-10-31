@@ -135,16 +135,20 @@ pub fn page(app: &mut App, ui: &mut Ui) {
                     let client = app.client.clone();
                     match kind {
                         RelationshipType::IncomingRequest => {
-                            if widgets::icon_button(&mut child, Icon::Close, "Ignore", &pal, false).clicked() {
+                            if widgets::icon_button(&mut child, Icon::Close, "Ignore request", &pal, false).clicked() {
                                 client.spawn_action("ignore_request", move |c| async move { c.http().remove_relationship(id).await });
                             }
                             if widgets::icon_button(&mut child, Icon::Check, "Accept", &pal, false).clicked() {
                                 client.spawn_action("accept_request", move |c| async move { c.http().add_relationship(id).await });
                             }
                         }
-                        RelationshipType::OutgoingRequest | RelationshipType::Blocked => {
-                            let tip = if kind == RelationshipType::Blocked { "Unblock" } else { "Cancel" };
-                            if widgets::icon_button(&mut child, Icon::Close, tip, &pal, false).clicked() {
+                        RelationshipType::Blocked => {
+                            if child.add(egui::Button::new(RichText::new("Unblock").color(pal.danger))).clicked() {
+                                client.unblock_user(id);
+                            }
+                        }
+                        RelationshipType::OutgoingRequest => {
+                            if widgets::icon_button(&mut child, Icon::Close, "Cancel", &pal, false).clicked() {
                                 client.spawn_action("remove_relationship", move |c| async move { c.http().remove_relationship(id).await });
                             }
                         }
@@ -158,18 +162,11 @@ pub fn page(app: &mut App, ui: &mut Ui) {
                         app.popup = Some(Popup::Profile { user: id, guild: None, at: rect.left_bottom() });
                     }
                     resp.context_menu(|ui| {
-                        if ui.button("Copy user ID").clicked() {
-                            ui.ctx().copy_text(id.to_string());
-                            ui.close();
-                        }
-                        if kind == RelationshipType::Friend && ui.button(RichText::new("Remove friend").color(pal.danger)).clicked() {
+                        if kind == RelationshipType::Friend && widgets::menu_item(ui, Icon::Close, "Remove friend", pal.danger) {
                             app.client.spawn_action("remove_friend", move |c| async move { c.http().remove_relationship(id).await });
                             ui.close();
                         }
-                        if kind != RelationshipType::Blocked && ui.button(RichText::new("Block").color(pal.danger)).clicked() {
-                            app.client.spawn_action("block", move |c| async move { c.http().block_user(id).await });
-                            ui.close();
-                        }
+                        crate::views::safety::user_menu(ui, &app.client, id, &pal);
                     });
                 }
             });

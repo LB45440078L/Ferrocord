@@ -14,7 +14,13 @@ pub fn show(n: &Notification, show_content: bool, sound: bool) {
                 notif.sound_name("silent");
             }
         }
-        #[cfg(not(windows))]
+        #[cfg(all(unix, not(target_os = "macos")))]
+        {
+            if !sound {
+                notif.hint(notify_rust::Hint::SuppressSound(true));
+            }
+        }
+        #[cfg(not(any(windows, all(unix, not(target_os = "macos")))))]
         {
             let _ = sound;
         }

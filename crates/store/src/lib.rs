@@ -841,7 +841,8 @@ impl Store {
 
     pub fn is_mentioned(&self, m: &Message) -> bool {
         let me = self.my_id();
-        if m.author.id == me {
+        // Blocked users never ping us (same as the official client).
+        if m.author.id == me || self.is_blocked(m.author.id) {
             return false;
         }
         if m.mentions_user(me) {
@@ -864,12 +865,15 @@ impl Store {
     }
 
     /// Users currently typing in a channel (expired entries are pruned).
+    /// Blocked users are left out.
     pub fn typing_users(&mut self, channel: Snowflake) -> Vec<Snowflake> {
         let me = self.my_id();
+        let relationships = &self.relationships;
+        let blocked = |u: &Snowflake| relationships.get(u).is_some_and(|r| r.kind == RelationshipType::Blocked);
         match self.typing.get_mut(&channel) {
             Some(t) => {
                 t.retain(|_, at| at.elapsed() < TYPING_TTL);
-                t.keys().copied().filter(|u| *u != me).collect()
+                t.keys().copied().filter(|u| *u != me && !blocked(u)).collect()
             }
             None => vec![],
         }
@@ -882,6 +886,16 @@ impl Store {
 
     pub fn friends(&self) -> Vec<&Relationship> {
         self.relationships.values().filter(|r| r.kind == RelationshipType::Friend).collect()
+    }
+
+    /// We have blocked this user.
+    pub fn is_blocked(&self, user: Snowflake) -> bool {
+        self.relationships.get(&user).is_some_and(|r| r.kind == RelationshipType::Blocked)
+    }
+
+    /// This user is on our friends list.
+    pub fn is_friend(&self, user: Snowflake) -> bool {
+        self.relationships.get(&user).is_some_and(|r| r.kind == RelationshipType::Friend)
     }
 }
 
@@ -979,5 +993,52 @@ mod tests {
             Event::parse("MESSAGE_REACTION_ADD", &json!({"user_id": "2", "channel_id": "200", "message_id": "999", "emoji": {"id": null, "name": "👍"}}));
         s.apply(&r);
         assert_eq!(s.message(Snowflake(200), Snowflake(999)).unwrap().reactions[0].count, 1);
+    }
+
+    #[test]
+    fn blocked_users() {
+        let mut s = Store::new();
+        let Event::Ready(mut r) = ready() else { unreachable!() };
+        r.relationships.push(serde_json::from_value(json!({"id": "3", "type": 2, "user_id": "3"})).unwrap());
+        s.apply(&Event::Ready(r));
+        assert!(s.is_blocked(Snowflake(3)));
+        assert!(!s.is_blocked(Snowflake(2)));
+        assert!(s.is_friend(Snowflake(2)));
+        assert!(!s.is_blocked(Snowflake(4)));
+
+        // Blocked users don't ping us, even in DMs.
+        let dm = |author: &str, id: &str| {
+            let (ev, err) = Event::parse(
+                "MESSAGE_CREATE",
+                &json!({"id": id, "channel_id": "300", "content": "hi", "author": {"id": author, "username": "x"},
+                        "timestamp": "2026-01-01T00:00:00Z", "mentions": []}),
+            );
+            assert!(err.is_none(), "{err:?}");
+            ev
+        };
+        s.apply(&dm("3", "700"));
+        assert_eq!(s.mention_count(Snowflake(300)), 0);
+        s.apply(&dm("2", "701"));
+        assert_eq!(s.mention_count(Snowflake(300)), 1);
+
+        // Typing from blocked users is filtered.
+        for user in ["2", "3"] {
+            let (t, err) = Event::parse("TYPING_START", &json!({"channel_id": "300", "user_id": user, "timestamp": 0}));
+            assert!(err.is_none(), "{err:?}");
+            s.apply(&t);
+        }
+        assert_eq!(s.typing_users(Snowflake(300)), vec![Snowflake(2)]);
+
+        // Relationship events: blocking a friend replaces the friendship, removal unblocks.
+        let (add, err) = Event::parse("RELATIONSHIP_ADD", &json!({"id": "2", "type": 2, "user": {"id": "2", "username": "friend"}}));
+        assert!(err.is_none(), "{err:?}");
+        s.apply(&add);
+        assert!(s.is_blocked(Snowflake(2)));
+        assert!(!s.is_friend(Snowflake(2)));
+        assert!(s.typing_users(Snowflake(300)).is_empty());
+        let (rm, err) = Event::parse("RELATIONSHIP_REMOVE", &json!({"id": "3", "type": 2}));
+        assert!(err.is_none(), "{err:?}");
+        s.apply(&rm);
+        assert!(!s.is_blocked(Snowflake(3)));
     }
 }

@@ -68,3 +68,44 @@ fn corrupted_scroll_state_is_repaired() {
     drop(harness);
     assert!(checked);
 }
+
+fn click_at(harness: &egui_kittest::Harness<'static, crate::app::App>, pos: egui::Pos2) {
+    harness.hover_at(pos);
+    harness.event(egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
+    harness.event(egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE });
+}
+
+/// Regression: the hover toolbar used to flicker (and swallow clicks) as soon as the
+/// pointer moved from the message onto it.
+#[test]
+fn hover_toolbar_stays_open_while_pointing_at_it() {
+    let mut f = demo_app(None);
+    let body = crate::probe::get(&f.harness.ctx, "message.body_top").expect("a message with text is rendered");
+    f.harness.hover_at(egui::pos2(600.0, body.min.y + 8.0));
+    f.harness.run_steps(3);
+    let bar = crate::probe::take(&f.harness.ctx, "message.toolbar").expect("hovering a message shows its toolbar");
+    f.harness.hover_at(bar.center());
+    for frame in 0..10 {
+        f.harness.step();
+        assert!(crate::probe::take(&f.harness.ctx, "message.toolbar").is_some(), "toolbar disappeared on frame {frame} while hovered");
+    }
+}
+
+/// Regression: images (and links) inside a message didn't receive clicks.
+#[test]
+fn clicking_an_image_opens_the_viewer_and_esc_closes_it() {
+    let mut f = demo_app(None);
+    let rust = {
+        let s = f.harness.state().client.store();
+        s.channels.values().find(|c| c.name.as_deref() == Some("rust-help")).map(|c| c.id).expect("rust-help")
+    };
+    f.harness.state_mut().select_channel(rust);
+    f.harness.run_steps(6);
+    let img = crate::probe::get(&f.harness.ctx, "attachment.image").expect("the demo image is rendered");
+    click_at(&f.harness, img.center());
+    f.harness.run_steps(3);
+    assert!(matches!(f.harness.state().modal, Some(crate::app::Modal::ImageViewer { .. })), "clicking the image should open the viewer");
+    f.harness.key_press(egui::Key::Escape);
+    f.harness.run_steps(3);
+    assert!(f.harness.state().modal.is_none(), "Esc should close the viewer");
+}

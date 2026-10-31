@@ -62,15 +62,22 @@ impl Default for Appearance {
 #[serde(default)]
 pub struct Notifications {
     pub desktop: bool,
+    /// Play a sound for new messages and mentions.
     pub sound: bool,
     pub taskbar_badge: bool,
     /// Show message text in notifications.
     pub show_content: bool,
+    /// Master volume of UI sounds (0.0–1.0).
+    pub sound_volume: f32,
+    /// Sounds for mute/deafen, camera, and voice joins/leaves.
+    pub voice_sounds: bool,
+    /// Ring while a DM or group call is incoming.
+    pub call_ring: bool,
 }
 
 impl Default for Notifications {
     fn default() -> Self {
-        Self { desktop: true, sound: true, taskbar_badge: true, show_content: true }
+        Self { desktop: true, sound: true, taskbar_badge: true, show_content: true, sound_volume: 0.6, voice_sounds: true, call_ring: true }
     }
 }
 
@@ -105,11 +112,27 @@ pub struct Privacy {
     pub send_typing: bool,
     /// Mark channels read automatically when viewed.
     pub auto_ack: bool,
+    /// Hide messages from blocked users entirely instead of collapsing them behind a "Show" bar.
+    pub hide_blocked_messages: bool,
+    /// Blur images in DMs and group DMs from users who aren't friends until clicked.
+    pub blur_media_from_strangers: bool,
+    /// Ask before opening links that leave the app.
+    pub confirm_external_links: bool,
+    /// Users ignored on this device only: their messages are hidden and they never notify.
+    /// Stored as strings (`ignored_users = ["1234…"]`).
+    pub ignored_users: Vec<ferrocord_model::Snowflake>,
 }
 
 impl Default for Privacy {
     fn default() -> Self {
-        Self { send_typing: true, auto_ack: true }
+        Self {
+            send_typing: true,
+            auto_ack: true,
+            hide_blocked_messages: false,
+            blur_media_from_strangers: true,
+            confirm_external_links: true,
+            ignored_users: Vec::new(),
+        }
     }
 }
 

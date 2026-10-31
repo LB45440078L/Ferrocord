@@ -149,6 +149,9 @@ pub fn panel(app: &mut App, ui: &mut Ui) {
                         if resp.clicked() {
                             app.popup = Some(Popup::Profile { user: *id, guild: Some(guild), at: rect.left_top() - vec2(310.0, 0.0) });
                         }
+                        if !app.demo {
+                            resp.context_menu(|ui| crate::views::safety::user_menu(ui, &app.client, *id, &pal));
+                        }
                     });
                 }
             }

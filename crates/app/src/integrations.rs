@@ -71,9 +71,11 @@ impl Integrations {
         let (join_tx, join_rx) = mpsc::channel();
         let (search_tx, search_rx) = mpsc::channel();
         let plugins = PluginHost::new(client.clone());
-        plugins.set_notifier(|title, body| {
+        let notify_client = client.clone();
+        plugins.set_notifier(move |title, body| {
             let n = Notification { title, body, channel_id: Snowflake(0), guild_id: None, message_id: Snowflake(0), icon_url: None };
-            crate::notify::show(&n, true, true);
+            crate::notify::show(&n, true, false);
+            crate::sounds::play(&notify_client, crate::sounds::Sound::Message);
         });
         let this = Self {
             client: client.clone(),

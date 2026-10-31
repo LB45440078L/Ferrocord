@@ -109,6 +109,18 @@ impl ImageCache {
                 Some(Img { texture: tex.id(), size: f.size })
             }
             Some(Entry::Loading) | Some(Entry::Failed) => None,
+            None if url.starts_with(DEMO_SCHEME) => {
+                // Offline demo pictures are drawn locally (no network in --demo or tests).
+                drop(entries);
+                let tex = self.inner.ctx.load_texture(url, demo_picture(url), TextureOptions::LINEAR);
+                let size = tex.size_vec2();
+                let id = tex.id();
+                self.inner.entries.lock().insert(
+                    url.to_string(),
+                    Entry::Ready(Frames { frames: vec![(tex, Duration::ZERO)], total: Duration::ZERO, size, last_used: Instant::now() }),
+                );
+                Some(Img { texture: id, size })
+            }
             None => {
                 entries.insert(url.to_string(), Entry::Loading);
                 drop(entries);
@@ -250,4 +262,41 @@ fn collect_frames(frames: image::Frames<'_>) -> Vec<(image::RgbaImage, Duration)
             (f.into_buffer(), Duration::from_millis(ms as u64))
         })
         .collect()
+}
+
+/// URL scheme of the generated pictures used by `--demo`.
+pub const DEMO_SCHEME: &str = "demo://";
+
+/// A soft sunset landscape, sized from `width=`/`height=` in the URL (as requested
+/// through the media proxy), so the demo shows real-looking image attachments.
+fn demo_picture(url: &str) -> ColorImage {
+    let param = |k: &str| url.split(['?', '&']).find_map(|p| p.strip_prefix(k)).and_then(|v| v.parse::<usize>().ok());
+    let (w, h) = (param("width=").unwrap_or(800).clamp(8, 1600), param("height=").unwrap_or(450).clamp(8, 1600));
+    let mut px = Vec::with_capacity(w * h);
+    let lerp = |a: f32, b: f32, t: f32| a + (b - a) * t;
+    for y in 0..h {
+        let fy = y as f32 / h as f32;
+        for x in 0..w {
+            let fx = x as f32 / w as f32;
+            // Sky: deep blue to warm orange towards the horizon.
+            let t = (fy / 0.62).min(1.0);
+            let (mut r, mut g, mut b) = (lerp(38.0, 250.0, t), lerp(52.0, 150.0, t * t), lerp(110.0, 90.0, t));
+            // Sun.
+            let d = ((fx - 0.62).powi(2) * 3.0 + (fy - 0.55).powi(2) * 9.0).sqrt();
+            let glow = (1.0 - d * 2.2).clamp(0.0, 1.0);
+            r = lerp(r, 255.0, glow);
+            g = lerp(g, 214.0, glow);
+            b = lerp(b, 140.0, glow);
+            // Hills.
+            let hill = 0.66 + 0.06 * (fx * 7.0).sin() + 0.03 * (fx * 17.0 + 1.0).sin();
+            if fy > hill {
+                let k = ((fy - hill) * 4.0).min(1.0);
+                r = lerp(70.0, 25.0, k);
+                g = lerp(40.0, 20.0, k);
+                b = lerp(70.0, 40.0, k);
+            }
+            px.push(egui::Color32::from_rgb(r as u8, g as u8, b as u8));
+        }
+    }
+    ColorImage::new([w, h], px)
 }

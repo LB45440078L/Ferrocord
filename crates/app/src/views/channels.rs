@@ -304,6 +304,12 @@ fn dm_list(app: &mut App, ui: &mut Ui) {
                 ui.ctx().copy_text(id.to_string());
                 ui.close();
             }
+            // 1:1 DMs: actions on the other user.
+            let peer = client.store().channels.get(&id).filter(|c| c.kind == ChannelType::Dm).and_then(|c| c.recipient_ids().first().copied());
+            if let Some(user) = peer {
+                ui.separator();
+                crate::views::safety::user_menu(ui, &client, user, &pal);
+            }
         });
     }
 }
