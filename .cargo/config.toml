@@ -1,0 +1,4 @@
+[env]
+# The Opus sources bundled by audiopus_sys declare cmake_minimum_required < 3.5,
+# which CMake 4.x rejects. This keeps the vendored build working on new CMake.
+CMAKE_POLICY_VERSION_MINIMUM = "3.5"
