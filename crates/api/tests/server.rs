@@ -19,7 +19,7 @@ struct Env {
 fn start() -> Env {
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
     let dir = tempfile::tempdir().unwrap();
-    let paths = Paths { config_dir: dir.path().join("config"), data_dir: dir.path().join("data"), cache_dir: dir.path().join("cache") };
+    let paths = Paths::under(dir.path());
     let client = Client::new(tokio::runtime::Handle::current(), paths);
     client.update_config(|c| {
         c.api.enabled = true;

@@ -21,7 +21,7 @@ struct Env {
 fn env() -> Env {
     let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(1).enable_all().build().unwrap();
     let dir = tempfile::tempdir().unwrap();
-    let paths = Paths { config_dir: dir.path().join("config"), data_dir: dir.path().join("data"), cache_dir: dir.path().join("cache") };
+    let paths = Paths::under(dir.path());
     let client = Client::new(rt.handle().clone(), paths);
     let host = PluginHost::new(client.clone());
     Env { _rt: rt, _dir: dir, client, host }

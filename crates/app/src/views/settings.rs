@@ -506,11 +506,20 @@ fn advanced(app: &mut App, ui: &mut Ui) {
             ui.label(RichText::new("Latency").color(pal.text_faint));
             ui.label(app.client.latency().map(|l| format!("{} ms", l.as_millis())).unwrap_or_else(|| "—".into()));
             ui.end_row();
-            ui.label(RichText::new("Config folder").color(pal.text_faint));
-            if ui.link(app.client.paths().config_dir.display().to_string()).clicked() {
-                let _ = open::that_detached(&app.client.paths().config_dir);
+            let paths = app.client.paths();
+            let mut folders = vec![("Settings folder", &paths.config_dir)];
+            if paths.data_dir != paths.config_dir {
+                folders.push(("Data folder", &paths.data_dir));
             }
-            ui.end_row();
+            folders.push(("Logs folder", &paths.logs_dir));
+            for (label, dir) in folders {
+                ui.label(RichText::new(label).color(pal.text_faint));
+                if ui.link(dir.display().to_string()).clicked() {
+                    let _ = std::fs::create_dir_all(dir);
+                    let _ = open::that_detached(dir);
+                }
+                ui.end_row();
+            }
         });
     });
     card(ui, &pal, |ui| {

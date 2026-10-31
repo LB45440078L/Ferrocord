@@ -146,7 +146,7 @@ mod tests {
     #[test]
     fn token_file() {
         let dir = tempfile::tempdir().unwrap();
-        let paths = Paths { config_dir: dir.path().into(), data_dir: dir.path().into(), cache_dir: dir.path().into() };
+        let paths = Paths::under(dir.path());
         let t1 = load_or_create_token(&paths).unwrap();
         assert_eq!(t1.len(), 64);
         assert_eq!(load_or_create_token(&paths).unwrap(), t1);

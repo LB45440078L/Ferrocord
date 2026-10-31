@@ -63,7 +63,7 @@ impl Env {
     async fn new() -> Self {
         let mock = MockDiscord::start().await;
         let dir = tempfile::tempdir().unwrap();
-        let paths = Paths { config_dir: dir.path().join("config"), data_dir: dir.path().join("data"), cache_dir: dir.path().join("cache") };
+        let paths = Paths::under(dir.path());
         let opts = ClientOptions::custom_endpoints(mock.api_base(), mock.gateway_url());
         let client = Client::with_options(tokio::runtime::Handle::current(), paths, opts);
         let ev = Events(client.subscribe());

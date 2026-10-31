@@ -135,23 +135,79 @@ impl Default for VoiceConfig {
     }
 }
 
-/// Platform directories used by Ferrocord.
+/// Directories used by Ferrocord.
+///
+/// | | Windows | macOS | Linux (XDG) |
+/// |---|---|---|---|
+/// | config | `%APPDATA%\Ferrocord` | `~/Library/Application Support/dev.ferrocord.Ferrocord` | `~/.config/ferrocord` |
+/// | data | `%APPDATA%\Ferrocord` | `~/Library/Application Support/dev.ferrocord.Ferrocord` | `~/.local/share/ferrocord` |
+/// | cache | `%LOCALAPPDATA%\Ferrocord\Cache` | `~/Library/Caches/dev.ferrocord.Ferrocord` | `~/.cache/ferrocord` |
+/// | logs | `%LOCALAPPDATA%\Ferrocord\Logs` | `~/Library/Logs/Ferrocord` | `~/.local/state/ferrocord/logs` |
+///
+/// Config and data roam with a Windows profile; the cache and logs stay on the
+/// machine. Account tokens never touch these folders: they live in the OS
+/// credential vault (see `ferrocord-auth`).
+///
+/// Two overrides exist for portable installs: the `FERROCORD_HOME` environment
+/// variable, or a file named `portable` next to the executable (which puts
+/// everything in a `data` folder beside it).
 #[derive(Debug, Clone)]
 pub struct Paths {
     pub config_dir: PathBuf,
     pub data_dir: PathBuf,
     pub cache_dir: PathBuf,
+    pub logs_dir: PathBuf,
 }
 
 impl Paths {
     pub fn discover() -> Self {
-        match directories::ProjectDirs::from("dev", "ferrocord", "Ferrocord") {
-            Some(d) => Self { config_dir: d.config_dir().to_path_buf(), data_dir: d.data_dir().to_path_buf(), cache_dir: d.cache_dir().to_path_buf() },
-            None => {
-                let base = std::env::current_dir().unwrap_or_default().join("ferrocord-data");
-                Self { config_dir: base.clone(), data_dir: base.clone(), cache_dir: base.join("cache") }
-            }
+        if let Some(home) = std::env::var_os("FERROCORD_HOME").filter(|v| !v.is_empty()) {
+            return Self::under(PathBuf::from(home));
         }
+        if let Some(dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(PathBuf::from))
+            && dir.join("portable").is_file()
+        {
+            return Self::under(dir.join("data"));
+        }
+        Self::platform().unwrap_or_else(|| Self::under(std::env::current_dir().unwrap_or_default().join("ferrocord-data")))
+    }
+
+    /// Everything under one root folder (portable mode, tests).
+    pub fn under(root: impl Into<PathBuf>) -> Self {
+        let root = root.into();
+        Self { config_dir: root.join("config"), data_dir: root.join("data"), cache_dir: root.join("cache"), logs_dir: root.join("logs") }
+    }
+
+    #[cfg(windows)]
+    fn platform() -> Option<Self> {
+        let b = directories::BaseDirs::new()?;
+        let roaming = b.config_dir().join("Ferrocord");
+        let local = b.data_local_dir().join("Ferrocord");
+        Some(Self { config_dir: roaming.clone(), data_dir: roaming, cache_dir: local.join("Cache"), logs_dir: local.join("Logs") })
+    }
+
+    #[cfg(target_os = "macos")]
+    fn platform() -> Option<Self> {
+        let b = directories::BaseDirs::new()?;
+        let support = b.data_dir().join(BUNDLE_ID);
+        Some(Self {
+            config_dir: support.clone(),
+            data_dir: support,
+            cache_dir: b.cache_dir().join(BUNDLE_ID),
+            logs_dir: b.home_dir().join("Library/Logs/Ferrocord"),
+        })
+    }
+
+    #[cfg(not(any(windows, target_os = "macos")))]
+    fn platform() -> Option<Self> {
+        let b = directories::BaseDirs::new()?;
+        let state = b.state_dir().map(PathBuf::from).unwrap_or_else(|| b.home_dir().join(".local/state"));
+        Some(Self {
+            config_dir: b.config_dir().join("ferrocord"),
+            data_dir: b.data_dir().join("ferrocord"),
+            cache_dir: b.cache_dir().join("ferrocord"),
+            logs_dir: state.join("ferrocord/logs"),
+        })
     }
 
     pub fn config_file(&self) -> PathBuf {
@@ -166,12 +222,37 @@ impl Paths {
         self.cache_dir.join("media")
     }
 
+    /// Window layout and UI state saved by eframe.
+    pub fn ui_state_file(&self) -> PathBuf {
+        self.data_dir.join("ui-state.ron")
+    }
+
+    /// Profile of the embedded WebView used for captchas.
+    pub fn webview_dir(&self) -> PathBuf {
+        self.cache_dir.join("webview")
+    }
+
+    /// Every folder Ferrocord writes to, deduplicated, for display and cleanup.
+    pub fn all_dirs(&self) -> Vec<PathBuf> {
+        let mut v: Vec<PathBuf> = Vec::new();
+        for d in [&self.config_dir, &self.data_dir, &self.cache_dir, &self.logs_dir] {
+            if !v.iter().any(|x| d.starts_with(x)) {
+                v.retain(|x| !x.starts_with(d));
+                v.push(d.clone());
+            }
+        }
+        v
+    }
+
     pub fn ensure(&self) {
-        for d in [&self.config_dir, &self.data_dir, &self.cache_dir, &self.plugins_dir(), &self.media_cache()] {
+        for d in [&self.config_dir, &self.data_dir, &self.cache_dir, &self.logs_dir, &self.plugins_dir(), &self.media_cache()] {
             let _ = std::fs::create_dir_all(d);
         }
     }
 }
+
+#[cfg(target_os = "macos")]
+const BUNDLE_ID: &str = "dev.ferrocord.Ferrocord";
 
 impl Config {
     pub fn load(paths: &Paths) -> Self {
@@ -193,6 +274,43 @@ impl Config {
                 }
             }
             Err(e) => tracing::error!(error = %e, "failed to serialize config"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn under_puts_everything_below_the_root() {
+        let p = Paths::under("/portable/data");
+        for dir in [&p.config_dir, &p.data_dir, &p.cache_dir, &p.logs_dir] {
+            assert!(dir.starts_with("/portable/data"), "{}", dir.display());
+        }
+        assert_eq!(p.ui_state_file(), PathBuf::from("/portable/data/data/ui-state.ron"));
+        assert_eq!(p.webview_dir(), PathBuf::from("/portable/data/cache/webview"));
+    }
+
+    #[test]
+    fn all_dirs_drops_duplicates_and_nested_folders() {
+        // Windows shares one roaming folder for config and data, with the cache and logs elsewhere.
+        let roaming = PathBuf::from("/roaming/Ferrocord");
+        let local = PathBuf::from("/local/Ferrocord");
+        let p = Paths { config_dir: roaming.clone(), data_dir: roaming.clone(), cache_dir: local.join("Cache"), logs_dir: local.join("Logs") };
+        assert_eq!(p.all_dirs(), vec![roaming.clone(), local.join("Cache"), local.join("Logs")]);
+
+        // A folder inside another one is removed together with its parent.
+        let p = Paths { config_dir: roaming.join("config"), data_dir: roaming.clone(), cache_dir: roaming.join("cache"), logs_dir: local };
+        assert_eq!(p.all_dirs(), vec![roaming, PathBuf::from("/local/Ferrocord")]);
+    }
+
+    #[test]
+    fn platform_dirs_are_named_after_ferrocord() {
+        let Some(p) = Paths::platform() else { return };
+        for dir in [&p.config_dir, &p.data_dir, &p.cache_dir, &p.logs_dir] {
+            let s = dir.to_string_lossy().to_lowercase();
+            assert!(s.contains("ferrocord"), "{s}");
         }
     }
 }

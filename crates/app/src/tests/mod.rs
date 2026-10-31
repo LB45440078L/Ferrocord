@@ -21,7 +21,7 @@ pub struct Fixture {
 pub fn demo_app(view: Option<&str>) -> Fixture {
     let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().expect("runtime");
     let dir = tempfile::tempdir().expect("tempdir");
-    let paths = Paths { config_dir: dir.path().join("config"), data_dir: dir.path().join("data"), cache_dir: dir.path().join("cache") };
+    let paths = Paths::under(dir.path());
     let client = Client::with_options(rt.handle().clone(), paths, ClientOptions::offline());
     let view = view.map(str::to_string);
     let mut harness = Harness::builder().with_size(egui::vec2(1280.0, 800.0)).build_eframe(move |cc| App::new(cc, client, true, view));
