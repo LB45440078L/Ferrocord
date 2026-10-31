@@ -4,6 +4,7 @@ use egui::{Color32, CornerRadius, FontId, RichText, Stroke, Ui, vec2};
 use ferrocord_core::Theme;
 
 use crate::app::App;
+use crate::icons::Icon;
 use crate::theme;
 use crate::widgets;
 
@@ -93,7 +94,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) -> bool {
                             let title = TABS.iter().find(|t| t.0 == app.settings_tab).map(|t| t.1).unwrap_or_default();
                             ui.label(RichText::new(title).font(FontId::new(20.0, theme::bold())));
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                if widgets::icon_button(ui, "×", "Close (Esc)", &pal, false).clicked() {
+                                if widgets::icon_button(ui, Icon::Close, "Close (Esc)", &pal, false).clicked() {
                                     keep = false;
                                 }
                             });
@@ -274,12 +275,12 @@ fn plugins(app: &mut App, ui: &mut Ui) {
     let pal = app.pal;
     ui.label(RichText::new("Plugins are sandboxed Luau scripts. They only get the permissions you grant them.").color(pal.text_muted));
     ui.horizontal(|ui| {
-        if ui.button("📂 Open plugins folder").clicked() {
+        if ui.button("Open plugins folder").clicked() {
             let dir = app.ext.plugins_dir();
             let _ = std::fs::create_dir_all(&dir);
             let _ = open::that_detached(dir);
         }
-        if ui.button("⟳ Rescan").clicked() {
+        if ui.button("Rescan").clicked() {
             app.ext.rescan();
         }
     });
@@ -362,7 +363,11 @@ fn api(app: &mut App, ui: &mut Ui) {
     }
     card(ui, &pal, |ui| match app.ext.api_status() {
         Some((addr, token)) => {
-            ui.label(RichText::new(format!("● Listening on http://{addr}")).color(pal.success));
+            ui.horizontal(|ui| {
+                let (dot, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
+                ui.painter().circle_filled(dot.center(), 4.0, pal.success);
+                ui.label(RichText::new(format!("Listening on http://{addr}")).color(pal.success));
+            });
             ui.horizontal(|ui| {
                 ui.label("Token:");
                 ui.label(RichText::new(format!("{}…", &token[..token.len().min(8)])).monospace());
@@ -377,7 +382,7 @@ fn api(app: &mut App, ui: &mut Ui) {
         }
         None => {
             ui.label(
-                RichText::new(if cfg.enabled { app.ext.api_error().unwrap_or_else(|| "Starting…".into()) } else { "○ Disabled".into() }).color(pal.text_faint),
+                RichText::new(if cfg.enabled { app.ext.api_error().unwrap_or_else(|| "Starting…".into()) } else { "Disabled".into() }).color(pal.text_faint),
             );
         }
     });

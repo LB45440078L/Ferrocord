@@ -7,6 +7,7 @@ use ferrocord_core::model::{Attachment, ChannelType, Embed, Message, PartialEmoj
 use ferrocord_core::store::PendingState;
 
 use crate::app::{App, EmojiTarget, Modal, Popup};
+use crate::icons::{self, Icon};
 use crate::markdown::{self, MdAction, MdCtx};
 use crate::theme;
 use crate::widgets;
@@ -70,13 +71,8 @@ fn header(app: &mut App, ui: &mut Ui, channel: Snowflake) {
         (name, c.and_then(|c| c.topic.clone()).unwrap_or_default(), kind, dm_user)
     };
     ui.horizontal_centered(|ui| {
-        let icon = match kind {
-            ChannelType::Dm | ChannelType::GroupDm => "@",
-            ChannelType::PublicThread | ChannelType::PrivateThread | ChannelType::AnnouncementThread => "↳",
-            ChannelType::GuildAnnouncement => "📢",
-            _ => "#",
-        };
-        ui.label(RichText::new(icon).size(20.0).color(pal.text_faint));
+        let nsfw = app.client.store().channels.get(&channel).is_some_and(|c| c.nsfw);
+        icons::icon(ui, crate::views::channels::channel_icon(kind, nsfw), 22.0, pal.text_faint);
         let r = ui.add(egui::Label::new(RichText::new(&name).font(FontId::new(16.0, theme::bold()))).sense(Sense::click()));
         if let Some(u) = dm_user {
             let st = app.client.store().status(u);
@@ -103,14 +99,14 @@ fn header(app: &mut App, ui: &mut Ui, channel: Snowflake) {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if app.nav.guild.is_some() {
                 let show = app.client.config().appearance.show_member_list;
-                if widgets::icon_button(ui, "👥", "Member list", &pal, show).clicked() {
+                if widgets::icon_button(ui, Icon::Users, "Member list", &pal, show).clicked() {
                     app.client.update_config(|c| c.appearance.show_member_list = !show);
                 }
             }
-            if widgets::icon_button(ui, "🔍", "Search messages", &pal, false).clicked() {
+            if widgets::icon_button(ui, Icon::Search, "Search messages", &pal, false).clicked() {
                 app.modal = Some(Modal::Search { query: String::new(), results: None, searching: false });
             }
-            if widgets::icon_button(ui, "📌", "Pinned messages", &pal, false).clicked() {
+            if widgets::icon_button(ui, Icon::Pin, "Pinned messages", &pal, false).clicked() {
                 app.modal = Some(Modal::Pins { channel, messages: None });
                 let tx = app.ext.pins_tx.clone();
                 let client = app.client.clone();
@@ -553,7 +549,10 @@ fn body(app: &mut App, ui: &mut Ui, m: &Message, guild: Option<Snowflake>, acts:
     for snap in &m.message_snapshots {
         if let Some(content) = snap.message.get("content").and_then(|c| c.as_str()).filter(|c| !c.is_empty()) {
             egui::Frame::new().stroke(Stroke::new(1.0, pal.border)).corner_radius(CornerRadius::same(6)).inner_margin(egui::Margin::same(8)).show(ui, |ui| {
-                ui.label(RichText::new("↪ Forwarded").size(12.0).italics().color(pal.text_faint));
+                ui.horizontal(|ui| {
+                    icons::icon(ui, Icon::Reply, 14.0, pal.text_faint);
+                    ui.label(RichText::new("Forwarded").size(12.0).italics().color(pal.text_faint));
+                });
                 ui.label(content);
             });
         }
@@ -580,7 +579,17 @@ fn attachment(app: &App, ui: &mut Ui, msg: Snowflake, a: &Attachment, acts: &mut
             None => {
                 ui.painter().rect_filled(rect, CornerRadius::same(8), pal.bg_elevated);
                 if !app.images.is_failed(&url) {
-                    ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, "⏳", FontId::proportional(18.0), pal.text_faint);
+                    let t = ui.ctx().input(|i| i.time) as f32;
+                    ui.painter().circle_stroke(rect.center(), 9.0, Stroke::new(2.0, pal.text_faint.gamma_multiply(0.4)));
+                    let a0 = t * 4.0;
+                    let pts: Vec<egui::Pos2> = (0..=12)
+                        .map(|k| {
+                            let a = a0 + k as f32 * 0.13;
+                            rect.center() + vec2(a.cos(), a.sin()) * 9.0
+                        })
+                        .collect();
+                    ui.painter().add(egui::Shape::line(pts, Stroke::new(2.0, pal.text_muted)));
+                    ui.ctx().request_repaint_after(std::time::Duration::from_millis(33));
                 }
             }
         }
@@ -602,11 +611,11 @@ fn attachment(app: &App, ui: &mut Ui, msg: Snowflake, a: &Attachment, acts: &mut
         return;
     }
     let icon = if a.is_video() {
-        "🎞"
+        Icon::Film
     } else if a.content_type.as_deref().is_some_and(|c| c.starts_with("audio/")) {
-        "🎵"
+        Icon::Music
     } else {
-        "📄"
+        Icon::File
     };
     egui::Frame::new()
         .fill(pal.bg_elevated)
@@ -616,7 +625,7 @@ fn attachment(app: &App, ui: &mut Ui, msg: Snowflake, a: &Attachment, acts: &mut
         .show(ui, |ui| {
             ui.set_max_width(420.0);
             ui.horizontal(|ui| {
-                ui.label(RichText::new(icon).size(26.0));
+                icons::icon(ui, icon, 30.0, pal.text_muted);
                 ui.vertical(|ui| {
                     if ui.link(RichText::new(&a.filename).color(pal.link)).clicked() {
                         acts.push(Act::Url(a.url.clone()));
@@ -809,7 +818,10 @@ fn reactions(app: &App, ui: &mut Ui, m: &Message, acts: &mut Vec<Act>) {
                 acts.push(Act::React(m.id, r.emoji.clone()));
             }
         }
-        let add = ui.add(egui::Button::new(RichText::new("➕").color(pal.text_muted)).fill(pal.bg_elevated).corner_radius(CornerRadius::same(8)));
+        let (add_rect, add) = ui.allocate_exact_size(vec2(34.0, 24.0), Sense::click());
+        ui.painter().rect_filled(add_rect, CornerRadius::same(8), if add.hovered() { pal.bg_selected } else { pal.bg_elevated });
+        icons::paint_centered(ui, add_rect.center(), 16.0, Icon::SmilePlus, if add.hovered() { pal.text } else { pal.text_muted });
+        let add = add.on_hover_text("Add reaction");
         if add.clicked() {
             acts.push(Act::Picker(m.id, add.rect.left_top()));
         }
@@ -819,27 +831,29 @@ fn reactions(app: &App, ui: &mut Ui, m: &Message, acts: &mut Vec<Act>) {
 fn system_message(app: &App, ui: &mut Ui, m: &Message, acts: &mut Vec<Act>) {
     let pal = app.pal;
     let name = app.client.store().display_name(m.guild_id.or(app.nav.guild), m.author.id);
-    let (icon, text) = match m.kind {
-        message_type::USER_JOIN => ("→", format!("{name} joined the server.")),
-        message_type::CHANNEL_PINNED_MESSAGE => ("📌", format!("{name} pinned a message to this channel.")),
+    let (icon, color, text) = match m.kind {
+        message_type::USER_JOIN => (Icon::UserPlus, pal.success, format!("{name} joined the server.")),
+        message_type::CHANNEL_PINNED_MESSAGE => (Icon::Pin, pal.text_faint, format!("{name} pinned a message to this channel.")),
         message_type::GUILD_BOOST | message_type::GUILD_BOOST_TIER_1 | message_type::GUILD_BOOST_TIER_2 | message_type::GUILD_BOOST_TIER_3 => {
-            ("💎", format!("{name} just boosted the server!"))
+            (Icon::Shield, theme::hex(0xff73fa), format!("{name} just boosted the server!"))
         }
-        message_type::RECIPIENT_ADD => {
-            ("→", format!("{name} added {} to the group.", m.mentions.first().map(|u| u.display_name().to_string()).unwrap_or_default()))
-        }
-        message_type::RECIPIENT_REMOVE => ("←", format!("{name} left the group.")),
-        message_type::CALL => ("📞", format!("{name} started a call.")),
-        message_type::CHANNEL_NAME_CHANGE => ("✏", format!("{name} changed the channel name: {}", m.content)),
-        message_type::THREAD_CREATED => ("🧵", format!("{name} started a thread: {}", m.content)),
-        message_type::CHANNEL_FOLLOW_ADD => ("📢", format!("{name} added {} to this channel.", m.content)),
-        message_type::AUTO_MODERATION_ACTION => ("🛡", "AutoMod blocked a message.".to_string()),
-        _ => ("ℹ", if m.content.is_empty() { format!("{name} did something.") } else { m.content.clone() }),
+        message_type::RECIPIENT_ADD => (
+            Icon::UserPlus,
+            pal.success,
+            format!("{name} added {} to the group.", m.mentions.first().map(|u| u.display_name().to_string()).unwrap_or_default()),
+        ),
+        message_type::RECIPIENT_REMOVE => (Icon::LogOut, pal.danger, format!("{name} left the group.")),
+        message_type::CALL => (Icon::Phone, pal.success, format!("{name} started a call.")),
+        message_type::CHANNEL_NAME_CHANGE => (Icon::Pencil, pal.text_faint, format!("{name} changed the channel name: {}", m.content)),
+        message_type::THREAD_CREATED => (Icon::Thread, pal.text_faint, format!("{name} started a thread: {}", m.content)),
+        message_type::CHANNEL_FOLLOW_ADD => (Icon::Megaphone, pal.text_faint, format!("{name} added {} to this channel.", m.content)),
+        message_type::AUTO_MODERATION_ACTION => (Icon::Shield, pal.warning, "AutoMod blocked a message.".to_string()),
+        _ => (Icon::Hash, pal.text_faint, if m.content.is_empty() { format!("{name} did something.") } else { m.content.clone() }),
     };
     ui.horizontal(|ui| {
-        ui.add_space(GUTTER / 2.0 - 6.0);
-        ui.label(RichText::new(icon).color(pal.text_faint));
-        ui.add_space(GUTTER / 2.0 - 16.0);
+        // Icon centered in the avatar column so it lines up with avatars above and below.
+        let (gutter, _) = ui.allocate_exact_size(vec2(GUTTER, 20.0), Sense::hover());
+        icons::paint_centered(ui, pos2(gutter.min.x + 36.0, gutter.center().y), 16.0, icon, color);
         let r = ui.add(egui::Label::new(RichText::new(text).color(pal.text_muted)).sense(Sense::click()));
         if r.clicked()
             && m.kind == message_type::CHANNEL_PINNED_MESSAGE
@@ -859,14 +873,14 @@ fn toolbar(app: &App, ui: &mut Ui, rect: Rect, m: &Message, acts: &mut Vec<Act>)
     let pal = app.pal;
     let me = app.client.store().my_id();
     let mine = m.author.id == me;
-    let mut buttons: Vec<(&str, &str, u8)> = vec![("😀", "Add reaction", 0), ("↩", "Reply", 1)];
+    let mut buttons: Vec<(Icon, &str, u8)> = vec![(Icon::SmilePlus, "Add reaction", 0), (Icon::Reply, "Reply", 1)];
     if mine {
-        buttons.push(("✏", "Edit", 2));
+        buttons.push((Icon::Pencil, "Edit", 2));
     }
     if mine || can(app, m.channel_id, Permissions::MANAGE_MESSAGES) {
-        buttons.push(("🗑", "Delete", 3));
+        buttons.push((Icon::Trash, "Delete", 3));
     }
-    let w = buttons.len() as f32 * 30.0 + 8.0;
+    let w = buttons.len() as f32 * 32.0 + 6.0;
     let bar = Rect::from_min_size(pos2(rect.max.x - w - 16.0, rect.min.y - 14.0), vec2(w, 32.0));
     egui::Area::new(ui.scope_id().with(("toolbar", m.id))).fixed_pos(bar.min).order(egui::Order::Foreground).show(ui.ctx(), |ui| {
         egui::Frame::new()
@@ -900,39 +914,40 @@ fn message_menu(app: &App, resp: &egui::Response, m: &Message, acts: &mut Vec<Ac
     let can_pin = can_manage || can(app, m.channel_id, Permissions::PIN_MESSAGES) || app.nav.guild.is_none();
     let link = format!("https://discord.com/channels/{}/{}/{}", m.guild_id.map(|g| g.to_string()).unwrap_or("@me".into()), m.channel_id, m.id);
     resp.context_menu(|ui| {
-        ui.set_min_width(180.0);
-        if ui.button("😀  Add reaction").clicked() {
+        ui.set_min_width(200.0);
+        let fg = app.pal.text;
+        if widgets::menu_item(ui, Icon::SmilePlus, "Add reaction", fg) {
             acts.push(Act::Picker(m.id, ui.min_rect().left_top()));
             ui.close();
         }
-        if ui.button("↩  Reply").clicked() {
+        if widgets::menu_item(ui, Icon::Reply, "Reply", fg) {
             acts.push(Act::Reply(m.id));
             ui.close();
         }
-        if mine && ui.button("✏  Edit message").clicked() {
+        if mine && widgets::menu_item(ui, Icon::Pencil, "Edit message", fg) {
             acts.push(Act::Edit(m.id, m.content.clone()));
             ui.close();
         }
-        if can_pin && ui.button(if m.pinned { "📌  Unpin message" } else { "📌  Pin message" }).clicked() {
+        if can_pin && widgets::menu_item(ui, Icon::Pin, if m.pinned { "Unpin message" } else { "Pin message" }, fg) {
             acts.push(Act::Pin(m.id, !m.pinned));
             ui.close();
         }
         ui.separator();
-        if ui.button("Copy text").clicked() {
+        if widgets::menu_item(ui, Icon::Copy, "Copy text", fg) {
             ui.ctx().copy_text(m.content.clone());
             ui.close();
         }
-        if ui.button("Copy message link").clicked() {
+        if widgets::menu_item(ui, Icon::Copy, "Copy message link", fg) {
             ui.ctx().copy_text(link.clone());
             ui.close();
         }
-        if ui.button("Copy message ID").clicked() {
+        if widgets::menu_item(ui, Icon::Copy, "Copy message ID", fg) {
             ui.ctx().copy_text(m.id.to_string());
             ui.close();
         }
         if mine || can_manage {
             ui.separator();
-            if ui.button(RichText::new("🗑  Delete message").color(theme::hex(0xf04f5c))).clicked() {
+            if widgets::menu_item(ui, Icon::Trash, "Delete message", app.pal.danger) {
                 acts.push(Act::Delete(m.id));
                 ui.close();
             }
@@ -1033,7 +1048,7 @@ fn composer(app: &mut App, ui: &mut Ui, channel: Snowflake) {
                     ui.label(RichText::new("Replying to").size(13.0).color(pal.text_muted));
                     ui.label(RichText::new(name).size(13.0).strong());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button("×").clicked() {
+                        if widgets::icon_button(ui, Icon::Close, "Cancel reply", &pal, false).clicked() {
                             app.composers.entry(channel).or_default().reply_to = None;
                         }
                         let c = app.composers.entry(channel).or_default();
@@ -1058,7 +1073,7 @@ fn composer(app: &mut App, ui: &mut Ui, channel: Snowflake) {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new("Editing message — Enter to save, Esc to cancel").size(13.0).color(pal.text_muted));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button("×").clicked() {
+                        if widgets::icon_button(ui, Icon::Close, "Cancel edit", &pal, false).clicked() {
                             let c = app.composers.entry(channel).or_default();
                             c.editing = None;
                             c.text.clear();
@@ -1077,8 +1092,9 @@ fn composer(app: &mut App, ui: &mut Ui, channel: Snowflake) {
             for (i, f) in files.iter().enumerate() {
                 egui::Frame::new().fill(pal.bg_elevated).corner_radius(CornerRadius::same(6)).inner_margin(egui::Margin::symmetric(8, 4)).show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.label(format!("📎 {}", f.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()));
-                        if ui.small_button("×").clicked() {
+                        icons::icon(ui, Icon::File, 16.0, pal.text_muted);
+                        ui.label(f.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default());
+                        if widgets::icon_button(ui, Icon::Close, "Remove", &pal, false).clicked() {
                             remove = Some(i);
                         }
                     });
@@ -1098,30 +1114,37 @@ fn composer(app: &mut App, ui: &mut Ui, channel: Snowflake) {
     let enter = !autocomplete_open && ui.input(|i| i.key_pressed(egui::Key::Enter) && !i.modifiers.shift);
     let up_edit = ui.input(|i| i.key_pressed(egui::Key::ArrowUp));
 
-    egui::Frame::new()
+    let bar = egui::Frame::new()
         .fill(pal.bg_elevated)
         .corner_radius(if reply_to.is_some() || editing.is_some() { CornerRadius { nw: 0, ne: 0, sw: 8, se: 8 } } else { CornerRadius::same(8) })
-        .inner_margin(egui::Margin::symmetric(8, 4))
+        .inner_margin(egui::Margin::symmetric(6, 3))
         .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                if can_attach
-                    && widgets::icon_button(ui, "➕", "Upload a file", &pal, false).clicked()
-                    && let Some(paths) = rfd::FileDialog::new().pick_files()
-                {
-                    app.composers.entry(channel).or_default().files.extend(paths);
+            // Fixed first-row height so buttons center on the first line even when the box grows.
+            let row_h = ui.fonts_mut(|f| f.row_height(&FontId::proportional(15.0))) + 18.0;
+            ui.allocate_ui_with_layout(vec2(ui.available_width(), row_h), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                if can_attach {
+                    let r = widgets::icon_button(ui, Icon::CirclePlus, "Upload a file", &pal, false);
+                    crate::probe::record(ui.ctx(), "composer.attach", r.rect);
+                    if r.clicked()
+                        && let Some(paths) = rfd::FileDialog::new().pick_files()
+                    {
+                        app.composers.entry(channel).or_default().files.extend(paths);
+                    }
                 }
-                let avail = ui.available_width() - 40.0;
+                let avail = ui.available_width() - 34.0;
                 let c = app.composers.entry(channel).or_default();
                 let te = egui::TextEdit::multiline(&mut c.text)
                     .id(egui::Id::unique(("composer", channel)))
                     .hint_text(RichText::new(&placeholder).color(pal.text_faint))
                     .desired_rows(1)
                     .desired_width(avail)
-                    .frame(egui::Frame::NONE)
-                    .margin(vec2(4.0, 8.0))
+                    // Padding lives on the frame: egui ignores `.margin()` once `.frame()` is set.
+                    .frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(6, 9)))
                     .return_key(Some(egui::KeyboardShortcut::new(egui::Modifiers::SHIFT, egui::Key::Enter)))
                     .font(FontId::proportional(15.0));
                 let r = ui.add(te);
+                crate::probe::record(ui.ctx(), "composer.input", r.rect);
                 if r.changed() && !c.text.is_empty() && !c.text.starts_with('/') && !app.demo {
                     app.client.typing(channel);
                 }
@@ -1147,11 +1170,14 @@ fn composer(app: &mut App, ui: &mut Ui, channel: Snowflake) {
                 if app.modal.is_none() && app.popup.is_none() && !ui.ctx().memory(|m| m.focused().is_some()) {
                     r.request_focus();
                 }
-                if widgets::icon_button(ui, "😀", "Emoji", &pal, false).clicked() {
+                let r = widgets::icon_button(ui, Icon::Smile, "Emoji", &pal, false);
+                crate::probe::record(ui.ctx(), "composer.emoji", r.rect);
+                if r.clicked() {
                     app.popup = Some(Popup::EmojiPicker { target: EmojiTarget::Composer(channel), at: ui.min_rect().right_top() });
                 }
             });
         });
+    crate::probe::record(ui.ctx(), "composer.bar", bar.response.rect);
 
     // Files dropped onto the window are attached.
     let dropped: Vec<std::path::PathBuf> =

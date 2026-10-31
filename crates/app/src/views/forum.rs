@@ -21,7 +21,7 @@ pub fn forum(app: &mut App, ui: &mut Ui, channel: Snowflake) {
             let rect = ui.max_rect();
             ui.painter().hline(rect.x_range(), rect.max.y - 0.5, Stroke::new(1.0, pal.border));
             ui.horizontal_centered(|ui| {
-                ui.label(RichText::new("💬").size(18.0).color(pal.text_faint));
+                crate::icons::icon(ui, crate::icons::Icon::Forum, 22.0, pal.text_faint);
                 ui.label(RichText::new(&name).font(FontId::new(16.0, theme::bold())));
             });
         },

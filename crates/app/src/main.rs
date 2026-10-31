@@ -4,11 +4,13 @@
 mod app;
 mod captcha;
 mod demo;
+mod icons;
 mod images;
 mod integrations;
 mod login;
 mod markdown;
 mod notify;
+mod probe;
 mod theme;
 mod views;
 mod widgets;

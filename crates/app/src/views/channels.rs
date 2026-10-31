@@ -4,6 +4,7 @@ use egui::{Color32, CornerRadius, FontId, Panel, RichText, Sense, Ui, pos2, vec2
 use ferrocord_core::model::{Channel, ChannelType, Snowflake, Status};
 
 use crate::app::{App, Modal};
+use crate::icons::{self, Icon};
 use crate::theme;
 use crate::widgets;
 
@@ -60,12 +61,11 @@ fn guild_channels(app: &mut App, ui: &mut Ui, guild: Snowflake) {
             let collapsed = app.collapsed.contains(&cat.id);
             ui.add_space(10.0);
             let name = cat.name.clone().unwrap_or_default().to_uppercase();
-            let resp = ui.add(
-                egui::Label::new(
-                    RichText::new(format!("{} {name}", if collapsed { "›" } else { "⌄" })).font(FontId::new(11.5, theme::bold())).color(app.pal.text_faint),
-                )
-                .sense(Sense::click()),
-            );
+            let (row, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 24.0), Sense::click());
+            let color = if resp.hovered() { app.pal.text_muted } else { app.pal.text_faint };
+            let chevron = if collapsed { Icon::ChevronRight } else { Icon::ChevronDown };
+            icons::paint_centered(ui, pos2(row.min.x + 6.0, row.center().y), 12.0, chevron, color);
+            ui.painter().text(pos2(row.min.x + 16.0, row.center().y), egui::Align2::LEFT_CENTER, name, FontId::new(11.5, theme::bold()), color);
             if resp.clicked() {
                 if collapsed {
                     app.collapsed.remove(&cat.id);
@@ -95,15 +95,16 @@ fn guild_channels(app: &mut App, ui: &mut Ui, guild: Snowflake) {
     }
 }
 
-fn channel_icon(kind: ChannelType, nsfw: bool) -> &'static str {
+pub fn channel_icon(kind: ChannelType, nsfw: bool) -> Icon {
     match kind {
-        ChannelType::GuildVoice => "🔊",
-        ChannelType::GuildStageVoice => "📡",
-        ChannelType::GuildAnnouncement => "📢",
-        ChannelType::GuildForum | ChannelType::GuildMedia => "💬",
-        ChannelType::PublicThread | ChannelType::PrivateThread | ChannelType::AnnouncementThread => "↳",
-        _ if nsfw => "🔞",
-        _ => "#",
+        ChannelType::GuildVoice => Icon::Volume,
+        ChannelType::GuildStageVoice => Icon::Stage,
+        ChannelType::GuildAnnouncement => Icon::Megaphone,
+        ChannelType::GuildForum | ChannelType::GuildMedia => Icon::Forum,
+        ChannelType::PublicThread | ChannelType::PrivateThread | ChannelType::AnnouncementThread => Icon::Thread,
+        ChannelType::Dm | ChannelType::GroupDm => Icon::At,
+        _ if nsfw => Icon::Shield,
+        _ => Icon::Hash,
     }
 }
 
@@ -126,7 +127,7 @@ fn channel_row(app: &mut App, ui: &mut Ui, c: &Channel, indent: f32) {
         pal.text_muted
     };
     let x = rect.min.x + 8.0 + indent;
-    ui.painter().text(pos2(x + 8.0, rect.center().y), egui::Align2::CENTER_CENTER, channel_icon(c.kind, c.nsfw), FontId::proportional(16.0), pal.text_faint);
+    icons::paint_centered(ui, pos2(x + 9.0, rect.center().y), 18.0, channel_icon(c.kind, c.nsfw), if selected { pal.text_muted } else { pal.text_faint });
     let font = if unread && !muted { FontId::new(14.5, theme::bold()) } else { FontId::proportional(14.5) };
     let name = c.name.clone().unwrap_or_default();
     let max_w = rect.max.x - (x + 22.0) - if mentions > 0 { 28.0 } else { 6.0 };
@@ -183,9 +184,9 @@ fn voice_members(app: &mut App, ui: &mut Ui, channel: Snowflake) {
             widgets::avatar(ui, &app.images, &url, 20.0, None, &app.pal);
             ui.label(RichText::new(name).size(13.0).color(app.pal.text_muted));
             if deaf {
-                ui.label(RichText::new("🔇").size(11.0));
+                icons::icon(ui, Icon::HeadphonesOff, 14.0, app.pal.danger);
             } else if mute {
-                ui.label(RichText::new("🎙").size(11.0).color(app.pal.danger));
+                icons::icon(ui, Icon::MicOff, 14.0, app.pal.danger);
             }
         });
     }
@@ -195,7 +196,7 @@ fn dm_list(app: &mut App, ui: &mut Ui) {
     let pal = app.pal;
     let selected_home = app.nav.channel.is_none();
     let (rect, resp) = widgets::list_row(ui, 40.0, selected_home, &pal);
-    ui.painter().text(pos2(rect.min.x + 22.0, rect.center().y), egui::Align2::CENTER_CENTER, "👥", FontId::proportional(18.0), pal.text_muted);
+    icons::paint_centered(ui, pos2(rect.min.x + 22.0, rect.center().y), 20.0, Icon::Users, if selected_home { pal.text } else { pal.text_muted });
     ui.painter().text(
         pos2(rect.min.x + 44.0, rect.center().y),
         egui::Align2::LEFT_CENTER,
@@ -327,17 +328,17 @@ fn account_panel(app: &mut App, ui: &mut Ui) {
         egui::Popup::menu(&r).show(|ui| {
             ui.set_min_width(200.0);
             for s in [Status::Online, Status::Idle, Status::Dnd, Status::Invisible] {
-                let label = format!(
-                    "{}  {}",
-                    match s {
-                        Status::Online => "🟢",
-                        Status::Idle => "🌙",
-                        Status::Dnd => "⛔",
-                        _ => "⚪",
-                    },
-                    s.label()
-                );
-                if ui.selectable_label(status == s, label).clicked() {
+                let (row, resp) = widgets::list_row(ui, 30.0, status == s, &pal);
+                let bg = if status == s {
+                    pal.bg_selected
+                } else if resp.hovered() {
+                    pal.bg_hover
+                } else {
+                    ui.visuals().window_fill
+                };
+                widgets::paint_status(ui, pos2(row.min.x + 14.0, row.center().y), 5.0, s, &pal, bg);
+                ui.painter().text(pos2(row.min.x + 28.0, row.center().y), egui::Align2::LEFT_CENTER, s.label(), FontId::proportional(14.0), pal.text);
+                if resp.clicked() {
                     app.client.set_status(s);
                     ui.close();
                 }
@@ -354,7 +355,7 @@ fn account_panel(app: &mut App, ui: &mut Ui) {
         });
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.add_space(6.0);
-            if widgets::icon_button(ui, "⚙", "User settings", &pal, false).clicked() {
+            if widgets::icon_button(ui, Icon::Settings, "User settings", &pal, false).clicked() {
                 app.modal = Some(Modal::Settings);
             }
         });

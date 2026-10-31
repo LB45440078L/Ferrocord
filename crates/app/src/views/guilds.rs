@@ -5,6 +5,7 @@ use ferrocord_core::model::Snowflake;
 use ferrocord_core::store::GuildListEntry;
 
 use crate::app::{App, Modal};
+use crate::icons::{self, Icon};
 use crate::theme;
 use crate::widgets;
 
@@ -32,7 +33,7 @@ pub fn rail(app: &mut App, ui: &mut Ui) {
                 }
             }
             separator(ui, &app.pal);
-            let add = action_circle(ui, "+", &app.pal).on_hover_text("Join a server");
+            let add = action_circle(ui, Icon::Plus, &app.pal).on_hover_text("Join a server");
             if add.clicked() {
                 app.modal = Some(Modal::JoinServer { code: String::new(), status: None });
             }
@@ -124,13 +125,7 @@ fn guild_button(app: &App, ui: &mut Ui, guild: Option<Snowflake>, name: &str, se
         (None, _) => {
             let fill = if selected || hovered { pal.accent } else { pal.bg_elevated };
             ui.painter().rect_filled(icon_rect, CornerRadius::same(radius), fill);
-            ui.painter().text(
-                icon_rect.center(),
-                egui::Align2::CENTER_CENTER,
-                "💬",
-                FontId::proportional(20.0),
-                if selected || hovered { Color32::WHITE } else { pal.text_muted },
-            );
+            icons::paint_centered(ui, icon_rect.center(), 24.0, Icon::Home, if selected || hovered { Color32::WHITE } else { pal.text_muted });
         }
     }
     if mentions > 0 {
@@ -161,7 +156,7 @@ fn folder(app: &mut App, ui: &mut Ui, id: i64, name: Option<String>, color: Opti
     }
     ui.painter().rect_filled(icon, CornerRadius::same(15), fcolor.gamma_multiply(if open { 0.25 } else { 0.35 }));
     if open {
-        ui.painter().text(icon.center(), egui::Align2::CENTER_CENTER, "📁", FontId::proportional(20.0), fcolor);
+        icons::paint_centered(ui, icon.center(), 22.0, Icon::Folder, fcolor);
     } else {
         // 2x2 mini icons preview.
         let s = app.client.store();
@@ -199,11 +194,11 @@ fn folder(app: &mut App, ui: &mut Ui, id: i64, name: Option<String>, color: Opti
     }
 }
 
-fn action_circle(ui: &mut Ui, glyph: &str, pal: &theme::Palette) -> egui::Response {
+fn action_circle(ui: &mut Ui, glyph: Icon, pal: &theme::Palette) -> egui::Response {
     let (slot, resp) = ui.allocate_exact_size(vec2(72.0, ICON + 8.0), Sense::click());
     let icon = Rect::from_center_size(slot.center(), vec2(ICON, ICON));
     let h = resp.hovered();
     ui.painter().rect_filled(icon, CornerRadius::same(if h { 15 } else { 23 }), if h { pal.success } else { pal.bg_elevated });
-    ui.painter().text(icon.center(), egui::Align2::CENTER_CENTER, glyph, FontId::proportional(24.0), if h { Color32::WHITE } else { pal.success });
+    icons::paint_centered(ui, icon.center(), 22.0, glyph, if h { Color32::WHITE } else { pal.success });
     resp
 }

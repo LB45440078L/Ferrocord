@@ -4,6 +4,7 @@ use egui::{FontId, Panel, RichText, Stroke, Ui, pos2, vec2};
 use ferrocord_core::model::{RelationshipType, Snowflake, Status};
 
 use crate::app::{App, Popup};
+use crate::icons::Icon;
 use crate::theme;
 use crate::widgets;
 
@@ -25,7 +26,8 @@ pub fn page(app: &mut App, ui: &mut Ui) {
             let rect = ui.max_rect();
             ui.painter().hline(rect.x_range(), rect.max.y - 0.5, Stroke::new(1.0, pal.border));
             ui.horizontal_centered(|ui| {
-                ui.label(RichText::new("👥 Friends").font(FontId::new(16.0, theme::bold())));
+                crate::icons::icon(ui, Icon::Users, 22.0, pal.text_muted);
+                ui.label(RichText::new("Friends").font(FontId::new(16.0, theme::bold())));
                 ui.add_space(12.0);
                 for (tab, label) in
                     [(FriendsTab::Online, "Online"), (FriendsTab::All, "All"), (FriendsTab::Pending, "Pending"), (FriendsTab::Blocked, "Blocked")]
@@ -133,21 +135,21 @@ pub fn page(app: &mut App, ui: &mut Ui) {
                     let client = app.client.clone();
                     match kind {
                         RelationshipType::IncomingRequest => {
-                            if widgets::icon_button(&mut child, "×", "Ignore", &pal, false).clicked() {
+                            if widgets::icon_button(&mut child, Icon::Close, "Ignore", &pal, false).clicked() {
                                 client.spawn_action("ignore_request", move |c| async move { c.http().remove_relationship(id).await });
                             }
-                            if widgets::icon_button(&mut child, "✔", "Accept", &pal, false).clicked() {
+                            if widgets::icon_button(&mut child, Icon::Check, "Accept", &pal, false).clicked() {
                                 client.spawn_action("accept_request", move |c| async move { c.http().add_relationship(id).await });
                             }
                         }
                         RelationshipType::OutgoingRequest | RelationshipType::Blocked => {
                             let tip = if kind == RelationshipType::Blocked { "Unblock" } else { "Cancel" };
-                            if widgets::icon_button(&mut child, "×", tip, &pal, false).clicked() {
+                            if widgets::icon_button(&mut child, Icon::Close, tip, &pal, false).clicked() {
                                 client.spawn_action("remove_relationship", move |c| async move { c.http().remove_relationship(id).await });
                             }
                         }
                         _ => {
-                            if widgets::icon_button(&mut child, "💬", "Message", &pal, false).clicked() {
+                            if widgets::icon_button(&mut child, Icon::Home, "Message", &pal, false).clicked() {
                                 app.open_dm_with(id);
                             }
                         }
@@ -186,9 +188,8 @@ fn add_friend(app: &mut App, ui: &mut Ui) {
             let r = ui.add(
                 egui::TextEdit::singleline(&mut app.add_friend)
                     .hint_text("Enter a username")
-                    .frame(egui::Frame::NONE)
-                    .desired_width(ui.available_width() - 180.0)
-                    .margin(vec2(6.0, 6.0)),
+                    .frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(6, 6)))
+                    .desired_width(ui.available_width() - 180.0),
             );
             send |= r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             send |= widgets::button(ui, "Send Friend Request", true, &pal).clicked();

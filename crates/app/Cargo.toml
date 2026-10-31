@@ -26,6 +26,7 @@ anyhow.workspace = true
 reqwest.workspace = true
 eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "persistence", "accesskit", "wayland", "x11"] }
 egui = { version = "0.37", features = ["monochrome_emoji_fonts"] }
+egui_extras = { version = "0.37", default-features = false, features = ["svg"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 qrcode = { version = "0.14", default-features = false }
 rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs"] }

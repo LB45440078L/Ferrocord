@@ -116,7 +116,7 @@ impl App {
     pub fn new(cc: &eframe::CreationContext<'_>, client: Client, demo: bool, demo_view: Option<String>) -> Self {
         let ctx = cc.egui_ctx.clone();
         theme::install_fonts(&ctx);
-        egui_extras_like_image_loaders(&ctx);
+        egui_extras::install_image_loaders(&ctx);
         let repaint_ctx = ctx.clone();
         client.set_repaint(move || repaint_ctx.request_repaint());
         let images = ImageCache::new(ctx.clone(), client.http().raw_client().clone(), client.runtime().clone(), client.paths().media_cache());
@@ -527,6 +527,3 @@ impl eframe::App for App {
         self.client.shutdown();
     }
 }
-
-/// Registers no extra loaders: all images go through [`ImageCache`].
-fn egui_extras_like_image_loaders(_ctx: &egui::Context) {}

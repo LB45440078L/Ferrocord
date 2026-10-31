@@ -375,7 +375,7 @@ impl LoginScreen {
                 c.request_repaint();
             });
         }
-        if ui.link("← Back").clicked() {
+        if ui.link("Back to login").clicked() {
             self.step = Step::Credentials;
             self.error = None;
         }

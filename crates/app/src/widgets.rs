@@ -3,6 +3,7 @@
 use egui::{Color32, CornerRadius, FontId, Rect, Response, Sense, Stroke, Ui, Vec2, pos2, vec2};
 use ferrocord_core::model::Status;
 
+use crate::icons::{self, Icon};
 use crate::images::ImageCache;
 use crate::theme::{self, Palette};
 
@@ -60,16 +61,30 @@ pub fn paint_status(ui: &Ui, c: egui::Pos2, r: f32, s: Status, pal: &Palette, bg
     }
 }
 
-/// Text-glyph icon button with hover highlight.
-pub fn icon_button(ui: &mut Ui, icon: &str, tooltip: &str, pal: &Palette, active: bool) -> Response {
-    let size = Vec2::splat(28.0);
-    let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
+/// Square icon button with hover highlight.
+pub fn icon_button(ui: &mut Ui, icon: Icon, tooltip: &str, pal: &Palette, active: bool) -> Response {
+    let (rect, resp) = ui.allocate_exact_size(Vec2::splat(30.0), Sense::click());
     if resp.hovered() || active {
         ui.painter().rect_filled(rect, CornerRadius::same(6), pal.bg_selected);
     }
     let color = if active || resp.hovered() { pal.text } else { pal.text_muted };
-    ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, icon, FontId::proportional(16.0), color);
+    icons::paint_centered(ui, rect.center(), 18.0, icon, color);
+    if resp.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
     resp.on_hover_text(tooltip)
+}
+
+/// Context-menu entry with a leading icon. Returns true when clicked.
+pub fn menu_item(ui: &mut Ui, icon: Icon, label: &str, color: Color32) -> bool {
+    let width = ui.available_width().max(180.0);
+    let (rect, resp) = ui.allocate_exact_size(vec2(width, 30.0), Sense::click());
+    if resp.hovered() {
+        ui.painter().rect_filled(rect, CornerRadius::same(4), ui.visuals().widgets.hovered.bg_fill);
+    }
+    icons::paint_centered(ui, pos2(rect.min.x + 16.0, rect.center().y), 16.0, icon, color);
+    ui.painter().text(pos2(rect.min.x + 34.0, rect.center().y), egui::Align2::LEFT_CENTER, label, FontId::proportional(14.0), color);
+    resp.clicked()
 }
 
 /// A full-width selectable row used in channel/member lists.

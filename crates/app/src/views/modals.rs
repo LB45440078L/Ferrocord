@@ -120,7 +120,10 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
             let mut jump = None;
             let r = egui::Modal::new(egui::Id::unique("pins")).frame(frame(app)).show(ctx, |ui| {
                 ui.set_width(520.0);
-                ui.label(RichText::new("📌 Pinned Messages").font(FontId::new(18.0, theme::bold())));
+                ui.horizontal(|ui| {
+                    crate::icons::icon(ui, crate::icons::Icon::Pin, 20.0, app.pal.text_muted);
+                    ui.label(RichText::new("Pinned Messages").font(FontId::new(18.0, theme::bold())));
+                });
                 ui.add_space(8.0);
                 match &messages {
                     None => {
