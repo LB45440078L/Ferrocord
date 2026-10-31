@@ -1,6 +1,6 @@
 //! Channel sidebar: guild channel tree or DM list, plus the account panel.
 
-use egui::{Color32, CornerRadius, FontId, Panel, RichText, Sense, Ui, pos2, vec2};
+use egui::{Color32, CornerRadius, FontId, Panel, Rect, RichText, Sense, Ui, pos2, vec2};
 use ferrocord_core::model::{Channel, ChannelType, Snowflake, Status};
 
 use crate::app::{App, Modal};
@@ -318,21 +318,36 @@ fn account_panel(app: &mut App, ui: &mut Ui) {
         (me.clone(), me.map(|m| m.user.avatar_url(64)).unwrap_or_default(), s.status(id), custom)
     };
     let Some(me) = me else { return };
-    ui.horizontal_centered(|ui| {
-        ui.add_space(8.0);
-        let ring = pal.bg_rail.lerp_to_gamma(pal.bg_side, 0.5);
-        let resp = egui::Frame::new().show(ui, |ui| {
-            ui.horizontal(|ui| {
-                widgets::avatar(ui, &app.images, &avatar, 34.0, Some((status, ring)), &pal);
-                ui.vertical(|ui| {
-                    ui.add_space(2.0);
-                    ui.label(RichText::new(me.user.display_name()).font(FontId::new(14.0, theme::bold())));
-                    let sub = custom.clone().unwrap_or_else(|| status.label().to_string());
-                    ui.label(RichText::new(sub).size(12.0).color(pal.text_faint));
-                });
-            });
-        });
-        let r = resp.response.interact(Sense::click());
+    // Explicit geometry: everything is centered on one line, independent of nested layout quirks.
+    let panel = ui.max_rect();
+    let cy = panel.center().y;
+    let ring = pal.bg_rail.lerp_to_gamma(pal.bg_side, 0.5);
+    let buttons_left = panel.max.x - 6.0 - 3.0 * 30.0 - 2.0 * ui.spacing().item_spacing.x;
+    let user_rect = Rect::from_min_max(pos2(panel.min.x + 6.0, cy - 21.0), pos2(buttons_left - 4.0, cy + 21.0));
+    let r = ui.interact(user_rect, ui.scope_id().with("account_user"), Sense::click());
+    if r.hovered() {
+        ui.painter().rect_filled(user_rect, CornerRadius::same(6), pal.bg_hover);
+    }
+    let av = Rect::from_center_size(pos2(user_rect.min.x + 4.0 + 17.0, cy), vec2(34.0, 34.0));
+    widgets::paint_avatar(ui, &app.images, &avatar, av, Some((status, if r.hovered() { pal.bg_hover } else { ring })), &pal);
+    let text_x = av.max.x + 10.0;
+    let max_w = (user_rect.max.x - text_x - 4.0).max(20.0);
+    let line = |text: String, font: FontId, color: Color32| {
+        ui.ctx().fonts_mut(|f| {
+            let mut job = egui::text::LayoutJob::simple_singleline(text, font, color);
+            job.wrap = egui::text::TextWrapping::truncate_at_width(max_w);
+            f.layout_job(job)
+        })
+    };
+    let name_g = line(me.user.display_name().to_string(), FontId::new(14.0, theme::bold()), pal.text);
+    let sub_g = line(custom.clone().unwrap_or_else(|| status.label().to_string()), FontId::proportional(12.0), pal.text_faint);
+    let top = cy - (name_g.size().y + sub_g.size().y) / 2.0;
+    let text_rect = Rect::from_min_size(pos2(text_x, top), vec2(name_g.size().x.max(sub_g.size().x), name_g.size().y + sub_g.size().y));
+    ui.painter().galley(pos2(text_x, top), name_g.clone(), pal.text);
+    ui.painter().galley(pos2(text_x, top + name_g.size().y), sub_g, pal.text_faint);
+    crate::probe::record(ui.ctx(), "account.avatar", av);
+    crate::probe::record(ui.ctx(), "account.text", text_rect);
+    {
         egui::Popup::menu(&r).show(|ui| {
             ui.set_min_width(200.0);
             for s in [Status::Online, Status::Idle, Status::Dnd, Status::Invisible] {
@@ -361,12 +376,13 @@ fn account_panel(app: &mut App, ui: &mut Ui) {
                 ui.close();
             }
         });
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.add_space(6.0);
-            if widgets::icon_button(ui, Icon::Settings, "User settings", &pal, false).clicked() {
-                app.modal = Some(Modal::Settings);
-            }
-            crate::views::voice::self_controls(app, ui);
-        });
-    });
+    }
+    let buttons = Rect::from_min_max(pos2(buttons_left, cy - 15.0), pos2(panel.max.x - 6.0, cy + 15.0));
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(buttons).layout(egui::Layout::right_to_left(egui::Align::Center)));
+    let settings = widgets::icon_button(&mut child, Icon::Settings, "User settings", &pal, false);
+    crate::probe::record(child.ctx(), "account.settings", settings.rect);
+    if settings.clicked() {
+        app.modal = Some(Modal::Settings);
+    }
+    crate::views::voice::self_controls(app, &mut child);
 }

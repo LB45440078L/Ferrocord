@@ -30,3 +30,26 @@ fn composer_input_has_room_for_one_line_plus_padding() {
     // A clipped text box puts the placeholder off-center; it must fit a row plus 2×9px padding.
     assert!(input.height() >= row + 18.0 - 0.5, "composer input too short: {} < {}", input.height(), row + 18.0);
 }
+
+#[test]
+fn account_panel_items_share_one_center_line() {
+    let f = demo_app(None);
+    let ctx = f.harness.ctx.clone();
+    let avatar = probe::get(&ctx, "account.avatar").expect("avatar probe");
+    let text = probe::get(&ctx, "account.text").expect("text probe");
+    let settings = probe::get(&ctx, "account.settings").expect("settings probe");
+    for (name, r) in [("text", text), ("settings", settings)] {
+        assert!((center_y(r) - center_y(avatar)).abs() <= 1.0, "{name} off the avatar's center line: {} vs {}", center_y(r), center_y(avatar));
+    }
+}
+
+#[test]
+fn message_body_follows_author_line_tightly() {
+    let f = demo_app(None);
+    let ctx = f.harness.ctx.clone();
+    let header = probe::get(&ctx, "message.header").expect("header probe");
+    let body_top = probe::get(&ctx, "message.body_top").expect("body probe").min.y;
+    let gap = body_top - header.max.y;
+    assert!(header.height() <= 24.0, "author line too tall: {}", header.height());
+    assert!((0.0..=4.0).contains(&gap), "gap between author line and content: {gap}");
+}

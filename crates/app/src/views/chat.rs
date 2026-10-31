@@ -422,8 +422,14 @@ fn message(app: &mut App, ui: &mut Ui, m: &Message, group_start: bool, acts: &mu
         }
         ui.vertical(|ui| {
             ui.set_width(content_w);
+            // Author line and content sit tight, like the official client.
+            ui.spacing_mut().item_spacing.y = 2.0;
             if show_header || compact {
-                ui.horizontal(|ui| {
+                // The row height comes from the parent's interact size; without this the
+                // author line is padded to 30 px and floats away from the content.
+                let interact_h = ui.spacing().interact_size.y;
+                ui.spacing_mut().interact_size.y = 0.0;
+                let header = ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 6.0;
                     if compact {
                         ui.label(
@@ -457,8 +463,14 @@ fn message(app: &mut App, ui: &mut Ui, m: &Message, group_start: bool, acts: &mu
                         ui.label(RichText::new(label).size(12.0).color(pal.text_faint)).on_hover_text(ts.format("%A, %B %-d, %Y %H:%M:%S").to_string());
                     }
                 });
+                ui.spacing_mut().interact_size.y = interact_h;
+                crate::probe::record(ui.ctx(), "message.header", header.response.rect);
             }
+            let body_top = ui.cursor().min.y;
             body(app, ui, m, guild, acts, pending.as_ref());
+            if !m.content.is_empty() {
+                crate::probe::record(ui.ctx(), "message.body_top", egui::Rect::from_min_size(egui::pos2(0.0, body_top), egui::Vec2::ZERO));
+            }
         });
     });
 
