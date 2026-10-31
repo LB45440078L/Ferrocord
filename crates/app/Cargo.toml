@@ -13,8 +13,8 @@ path = "src/main.rs"
 
 [dependencies]
 ferrocord-core.workspace = true
-# ferrocord-plugin.workspace = true
-# ferrocord-api.workspace = true
+ferrocord-plugin.workspace = true
+ferrocord-api.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

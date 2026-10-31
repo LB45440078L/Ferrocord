@@ -105,13 +105,7 @@ async fn session(st: AppState, mut socket: WebSocket) {
 
 /// Handles one client frame. Returns an immediate reply, if any; RPC results
 /// are delivered later through `out`.
-fn on_text(
-    st: &AppState,
-    raw: &str,
-    filter: &mut Option<HashSet<String>>,
-    out: &mpsc::UnboundedSender<Value>,
-    in_flight: &Arc<AtomicUsize>,
-) -> Option<Value> {
+fn on_text(st: &AppState, raw: &str, filter: &mut Option<HashSet<String>>, out: &mpsc::UnboundedSender<Value>, in_flight: &Arc<AtomicUsize>) -> Option<Value> {
     let v: Value = match serde_json::from_str(raw) {
         Ok(v) => v,
         Err(e) => return Some(json!({ "type": "error", "error": ApiError::bad_request(format!("invalid JSON: {e}")).to_json() })),
@@ -119,9 +113,8 @@ fn on_text(
     if let Some(op) = v.get("op").and_then(Value::as_str) {
         return Some(match op {
             "subscribe" => {
-                let names: Option<HashSet<String>> = v.get("events").and_then(Value::as_array).map(|a| {
-                    a.iter().filter_map(Value::as_str).map(|s| s.trim().to_ascii_uppercase()).collect()
-                });
+                let names: Option<HashSet<String>> =
+                    v.get("events").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).map(|s| s.trim().to_ascii_uppercase()).collect());
                 *filter = names.filter(|n| !n.is_empty() && !n.contains("*"));
                 let mut list: Vec<&String> = filter.iter().flatten().collect();
                 list.sort();

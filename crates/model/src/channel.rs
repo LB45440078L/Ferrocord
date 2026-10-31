@@ -206,11 +206,7 @@ impl Channel {
     }
 
     pub fn recipient_ids(&self) -> Vec<Snowflake> {
-        if !self.recipient_ids.is_empty() {
-            self.recipient_ids.clone()
-        } else {
-            self.recipients.iter().map(|u| u.id).collect()
-        }
+        if !self.recipient_ids.is_empty() { self.recipient_ids.clone() } else { self.recipients.iter().map(|u| u.id).collect() }
     }
 }
 

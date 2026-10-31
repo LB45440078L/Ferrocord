@@ -13,11 +13,10 @@ use std::time::{Duration, Instant};
 
 use ferrocord_http::ClientProfile;
 use ferrocord_model::Event;
-use ferrocord_model::gateway::{
-    ClientState, GatewayPayload, GuildSubscription, Hello, Identify, RequestGuildMembers, Resume, UpdatePresence,
-    UpdateVoiceState, capabilities, opcode,
-};
 use ferrocord_model::Snowflake;
+use ferrocord_model::gateway::{
+    ClientState, GatewayPayload, GuildSubscription, Hello, Identify, RequestGuildMembers, Resume, UpdatePresence, UpdateVoiceState, capabilities, opcode,
+};
 use futures_util::{SinkExt, StreamExt};
 use rand::Rng;
 use serde_json::Value;
@@ -41,13 +40,7 @@ pub struct GatewayConfig {
 
 impl GatewayConfig {
     pub fn new(token: String, profile: ClientProfile) -> Self {
-        Self {
-            token,
-            profile,
-            capabilities: capabilities::OFFICIAL_DESKTOP,
-            presence: UpdatePresence::default(),
-            url: DEFAULT_GATEWAY.into(),
-        }
+        Self { token, profile, capabilities: capabilities::OFFICIAL_DESKTOP, presence: UpdatePresence::default(), url: DEFAULT_GATEWAY.into() }
     }
 }
 
@@ -72,7 +65,11 @@ pub enum GatewayError {
 
 #[derive(Debug, Clone)]
 pub enum GatewayMessage {
-    Dispatch { seq: u64, event: Event, raw: Arc<Value> },
+    Dispatch {
+        seq: u64,
+        event: Box<Event>,
+        raw: Arc<Value>,
+    },
     State(ConnectionState),
     /// Round-trip time of the last heartbeat.
     Latency(Duration),
@@ -134,10 +131,7 @@ impl GatewayHandle {
     }
 
     pub fn search_recent_members(&self, guild: Snowflake, query: &str) {
-        self.send_raw(
-            opcode::SEARCH_RECENT_MEMBERS,
-            serde_json::json!({ "guild_id": guild, "query": query, "continuation_token": null }),
-        );
+        self.send_raw(opcode::SEARCH_RECENT_MEMBERS, serde_json::json!({ "guild_id": guild, "query": query, "continuation_token": null }));
     }
 
     pub fn reconnect(&self) {
@@ -170,16 +164,15 @@ struct Session {
 
 enum Outcome {
     /// Reconnect; `resume` says whether the session can be resumed.
-    Reconnect { resume: bool, delay: bool },
+    Reconnect {
+        resume: bool,
+        delay: bool,
+    },
     Fatal(GatewayError),
     Shutdown,
 }
 
-async fn run(
-    mut config: GatewayConfig,
-    mut cmd_rx: mpsc::UnboundedReceiver<Command>,
-    out: mpsc::UnboundedSender<GatewayMessage>,
-) {
+async fn run(mut config: GatewayConfig, mut cmd_rx: mpsc::UnboundedReceiver<Command>, out: mpsc::UnboundedSender<GatewayMessage>) {
     let mut session = Session::default();
     let mut failures = 0u32;
     loop {
@@ -424,7 +417,7 @@ async fn connect_once(
                             _ => {}
                         }
                         let raw = Arc::new(payload.d);
-                        if out.send(GatewayMessage::Dispatch { seq: payload.s.unwrap_or(0), event, raw }).is_err() {
+                        if out.send(GatewayMessage::Dispatch { seq: payload.s.unwrap_or(0), event: Box::new(event), raw }).is_err() {
                             return Outcome::Shutdown;
                         }
                     }

@@ -95,25 +95,19 @@ pub(crate) async fn guard(State(g): State<Guard>, req: Request, next: Next) -> R
     let headers = req.headers();
     let host = headers.get(header::HOST).and_then(|h| h.to_str().ok()).unwrap_or("");
     if !g.host_ok(host) {
-        return ApiError::new(axum::http::StatusCode::FORBIDDEN, "forbidden_host", "requests must be addressed to 127.0.0.1 or localhost")
-            .into_response();
+        return ApiError::new(axum::http::StatusCode::FORBIDDEN, "forbidden_host", "requests must be addressed to 127.0.0.1 or localhost").into_response();
     }
     if let Some(origin) = headers.get(header::ORIGIN)
         && !origin.to_str().is_ok_and(|o| g.origin_ok(o))
     {
-        return ApiError::new(axum::http::StatusCode::FORBIDDEN, "forbidden_origin", "browser-originated requests are not allowed")
-            .into_response();
+        return ApiError::new(axum::http::StatusCode::FORBIDDEN, "forbidden_origin", "browser-originated requests are not allowed").into_response();
     }
     let bearer = headers
         .get(header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok())
         .and_then(|h| h.strip_prefix("Bearer ").or_else(|| h.strip_prefix("bearer ")))
         .map(str::trim);
-    let query = if req.uri().path() == "/v1/ws" {
-        req.uri().query().and_then(|q| q.split('&').find_map(|kv| kv.strip_prefix("token=")))
-    } else {
-        None
-    };
+    let query = if req.uri().path() == "/v1/ws" { req.uri().query().and_then(|q| q.split('&').find_map(|kv| kv.strip_prefix("token="))) } else { None };
     let expected = g.token.read().clone();
     let authorized = bearer.or(query).is_some_and(|t| constant_time_eq(t.as_bytes(), expected.as_bytes()));
     if !authorized {

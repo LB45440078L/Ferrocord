@@ -96,9 +96,7 @@ impl Http {
     /// Accepts a request or (re)sends one to a known user id.
     pub async fn add_relationship(&self, user: Snowflake) -> R<()> {
         self.send_unit(
-            Request::put(format!("/users/@me/relationships/{user}"))
-                .header("X-Context-Properties", context_properties("ContextMenu"))
-                .json(json!({})),
+            Request::put(format!("/users/@me/relationships/{user}")).header("X-Context-Properties", context_properties("ContextMenu")).json(json!({})),
         )
         .await
     }
@@ -158,11 +156,7 @@ impl Http {
     }
 
     pub async fn suppress_embeds(&self, channel: Snowflake, message: Snowflake, flags: u64) -> R<()> {
-        self.send_unit(
-            Request::patch(format!("/channels/{channel}/messages/{message}"))
-                .json(json!({ "flags": flags | message_flags::SUPPRESS_EMBEDS })),
-        )
-        .await
+        self.send_unit(Request::patch(format!("/channels/{channel}/messages/{message}")).json(json!({ "flags": flags | message_flags::SUPPRESS_EMBEDS }))).await
     }
 
     pub async fn trigger_typing(&self, channel: Snowflake) -> R<()> {
@@ -182,10 +176,7 @@ impl Http {
     }
 
     pub async fn ack_bulk(&self, entries: &[(Snowflake, Snowflake)]) -> R<()> {
-        let read_states: Vec<Value> = entries
-            .iter()
-            .map(|(c, m)| json!({ "channel_id": c, "message_id": m, "read_state_type": 0 }))
-            .collect();
+        let read_states: Vec<Value> = entries.iter().map(|(c, m)| json!({ "channel_id": c, "message_id": m, "read_state_type": 0 })).collect();
         self.send_unit(Request::post("/read-states/ack-bulk").json(json!({ "read_states": read_states }))).await
     }
 
@@ -212,21 +203,14 @@ impl Http {
 
     pub async fn add_reaction(&self, channel: Snowflake, message: Snowflake, emoji: &PartialEmoji) -> R<()> {
         let e = encode_path(&emoji.route_key());
-        self.send_unit(
-            Request::put(format!("/channels/{channel}/messages/{message}/reactions/{e}/@me"))
-                .query("location", "Message")
-                .query("type", 0),
-        )
-        .await
+        self.send_unit(Request::put(format!("/channels/{channel}/messages/{message}/reactions/{e}/@me")).query("location", "Message").query("type", 0)).await
     }
 
     pub async fn remove_reaction(&self, channel: Snowflake, message: Snowflake, emoji: &PartialEmoji, user: Option<Snowflake>) -> R<()> {
         let e = encode_path(&emoji.route_key());
         let who = user.map(|u| u.to_string()).unwrap_or_else(|| "@me".into());
         self.send_unit(
-            Request::delete(format!("/channels/{channel}/messages/{message}/reactions/{e}/0/{who}"))
-                .query("location", "Message")
-                .query("burst", "false"),
+            Request::delete(format!("/channels/{channel}/messages/{message}/reactions/{e}/0/{who}")).query("location", "Message").query("burst", "false"),
         )
         .await
     }
@@ -268,11 +252,23 @@ impl Http {
     }
 
     pub async fn create_thread_from_message(&self, channel: Snowflake, message: Snowflake, name: &str) -> R<Channel> {
-        self.send_as(
-            Request::post(format!("/channels/{channel}/messages/{message}/threads"))
-                .json(json!({ "name": name, "auto_archive_duration": 4320 })),
-        )
-        .await
+        self.send_as(Request::post(format!("/channels/{channel}/messages/{message}/threads")).json(json!({ "name": name, "auto_archive_duration": 4320 })))
+            .await
+    }
+
+    /// Active posts of a forum/media channel, most recently active first.
+    pub async fn forum_threads(&self, channel: Snowflake, offset: u32) -> R<Vec<Channel>> {
+        let v = self
+            .send(
+                Request::get(format!("/channels/{channel}/threads/search"))
+                    .query("archived", "false")
+                    .query("sort_by", "last_message_time")
+                    .query("sort_order", "desc")
+                    .query("limit", 25)
+                    .query("offset", offset),
+            )
+            .await?;
+        Ok(v.get("threads").and_then(|t| serde_json::from_value(t.clone()).ok()).unwrap_or_default())
     }
 
     pub async fn join_thread(&self, thread: Snowflake) -> R<()> {

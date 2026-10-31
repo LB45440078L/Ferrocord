@@ -47,27 +47,43 @@ pub fn show(app: &mut App, ctx: &egui::Context) -> bool {
             ui.horizontal_top(|ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
                 ui.allocate_ui_with_layout(vec2(210.0, h), top_down, |ui| {
-                    egui::Frame::new().fill(pal.bg_side).corner_radius(CornerRadius { nw: 12, sw: 12, ne: 0, se: 0 }).inner_margin(egui::Margin::same(12)).show(ui, |ui| {
-                        ui.set_min_size(vec2(186.0, h - 24.0));
-                        ui.set_max_width(186.0);
-                        widgets::section_label(ui, "User settings", &pal);
-                        ui.add_space(4.0);
-                        for (tab, label) in TABS {
-                            let (rect, resp) = widgets::list_row(ui, 32.0, app.settings_tab == *tab, &pal);
-                            ui.painter().text(rect.left_center() + vec2(10.0, 0.0), egui::Align2::LEFT_CENTER, *label, FontId::proportional(14.5), if app.settings_tab == *tab { pal.text } else { pal.text_muted });
-                            if resp.clicked() {
-                                app.settings_tab = *tab;
+                    egui::Frame::new()
+                        .fill(pal.bg_side)
+                        .corner_radius(CornerRadius { nw: 12, sw: 12, ne: 0, se: 0 })
+                        .inner_margin(egui::Margin::same(12))
+                        .show(ui, |ui| {
+                            ui.set_min_size(vec2(186.0, h - 24.0));
+                            ui.set_max_width(186.0);
+                            widgets::section_label(ui, "User settings", &pal);
+                            ui.add_space(4.0);
+                            for (tab, label) in TABS {
+                                let (rect, resp) = widgets::list_row(ui, 32.0, app.settings_tab == *tab, &pal);
+                                ui.painter().text(
+                                    rect.left_center() + vec2(10.0, 0.0),
+                                    egui::Align2::LEFT_CENTER,
+                                    *label,
+                                    FontId::proportional(14.5),
+                                    if app.settings_tab == *tab { pal.text } else { pal.text_muted },
+                                );
+                                if resp.clicked() {
+                                    app.settings_tab = *tab;
+                                }
                             }
-                        }
-                        ui.add_space(8.0);
-                        ui.separator();
-                        let (rect, resp) = widgets::list_row(ui, 32.0, false, &pal);
-                        ui.painter().text(rect.left_center() + vec2(10.0, 0.0), egui::Align2::LEFT_CENTER, "Log Out", FontId::proportional(14.5), pal.danger);
-                        if resp.clicked() {
-                            app.client.logout();
-                            keep = false;
-                        }
-                    });
+                            ui.add_space(8.0);
+                            ui.separator();
+                            let (rect, resp) = widgets::list_row(ui, 32.0, false, &pal);
+                            ui.painter().text(
+                                rect.left_center() + vec2(10.0, 0.0),
+                                egui::Align2::LEFT_CENTER,
+                                "Log Out",
+                                FontId::proportional(14.5),
+                                pal.danger,
+                            );
+                            if resp.clicked() {
+                                app.client.logout();
+                                keep = false;
+                            }
+                        });
                 });
                 ui.allocate_ui_with_layout(vec2(w - 210.0, h), top_down, |ui| {
                     egui::Frame::new().inner_margin(egui::Margin::same(24)).show(ui, |ui| {
@@ -216,12 +232,22 @@ fn notifications(app: &mut App, ui: &mut Ui) {
     let mut cfg = app.client.config().notifications;
     let mut changed = false;
     card(ui, &pal, |ui| {
-        changed |= toggle(ui, &mut cfg.desktop, "Desktop notifications", "Show a system notification for mentions and DMs when the window isn't focused.", pal.text_faint);
+        changed |= toggle(
+            ui,
+            &mut cfg.desktop,
+            "Desktop notifications",
+            "Show a system notification for mentions and DMs when the window isn't focused.",
+            pal.text_faint,
+        );
         changed |= toggle(ui, &mut cfg.show_content, "Show message content", "Include message text in notifications.", pal.text_faint);
         changed |= toggle(ui, &mut cfg.sound, "Notification sound", "", pal.text_faint);
         changed |= toggle(ui, &mut cfg.taskbar_badge, "Unread count in window title", "", pal.text_faint);
     });
-    ui.label(RichText::new("Per-server and per-channel notification levels follow your Discord settings (right-click a server or channel to mute).").size(12.5).color(pal.text_faint));
+    ui.label(
+        RichText::new("Per-server and per-channel notification levels follow your Discord settings (right-click a server or channel to mute).")
+            .size(12.5)
+            .color(pal.text_faint),
+    );
     if changed {
         app.client.update_config(|c| c.notifications = cfg);
     }
@@ -261,7 +287,10 @@ fn plugins(app: &mut App, ui: &mut Ui) {
     let list = app.ext.plugin_list();
     if list.is_empty() {
         card(ui, &pal, |ui| {
-            ui.label(RichText::new("No plugins installed. Copy a plugin folder (with plugin.toml) into the plugins folder, then press Rescan.").color(pal.text_faint));
+            ui.label(
+                RichText::new("No plugins installed. Copy a plugin folder (with plugin.toml) into the plugins folder, then press Rescan.")
+                    .color(pal.text_faint),
+            );
         });
     }
     for p in list {
@@ -311,7 +340,13 @@ fn api(app: &mut App, ui: &mut Ui) {
     ui.add_space(8.0);
     card(ui, &pal, |ui| {
         changed |= toggle(ui, &mut cfg.enabled, "Enable local API", "", pal.text_faint);
-        changed |= toggle(ui, &mut cfg.allow_actions, "Allow actions", "Let API clients send messages, react, change presence and mark channels read.", pal.text_faint);
+        changed |= toggle(
+            ui,
+            &mut cfg.allow_actions,
+            "Allow actions",
+            "Let API clients send messages, react, change presence and mark channels read.",
+            pal.text_faint,
+        );
         ui.horizontal(|ui| {
             ui.label("Port");
             let mut port = cfg.port as u32;
@@ -341,7 +376,9 @@ fn api(app: &mut App, ui: &mut Ui) {
             ui.label(RichText::new("See docs/API.md for endpoints and the WebSocket protocol.").size(12.5).color(pal.text_faint));
         }
         None => {
-            ui.label(RichText::new(if cfg.enabled { app.ext.api_error().unwrap_or_else(|| "Starting…".into()) } else { "○ Disabled".into() }).color(pal.text_faint));
+            ui.label(
+                RichText::new(if cfg.enabled { app.ext.api_error().unwrap_or_else(|| "Starting…".into()) } else { "○ Disabled".into() }).color(pal.text_faint),
+            );
         }
     });
 }
@@ -391,7 +428,9 @@ fn about(app: &mut App, ui: &mut Ui) {
         ui.label(RichText::new("A fast, open-source Discord client written in Rust.").color(pal.text_muted));
         ui.add_space(6.0);
         ui.label("Licensed under the BSD 3-Clause License.");
-        ui.label(RichText::new("Fonts: Inter and JetBrains Mono (SIL Open Font License). Emoji graphics: Twemoji (CC-BY 4.0).").size(12.5).color(pal.text_faint));
+        ui.label(
+            RichText::new("Fonts: Inter and JetBrains Mono (SIL Open Font License). Emoji graphics: Twemoji (CC-BY 4.0).").size(12.5).color(pal.text_faint),
+        );
         ui.add_space(6.0);
         ui.label(RichText::new("Ferrocord is not affiliated with, endorsed by or sponsored by Discord Inc. Using third-party clients may violate Discord's Terms of Service; use at your own risk.").size(12.5).color(pal.warning));
     });

@@ -3,10 +3,10 @@
 //! Every function returns the JSON payload of a successful call; REST handlers
 //! wrap it in a response and the WebSocket layer in `{"id", "result"}`.
 
-use ferrocord_core::model::{AllowedMentions, CreateMessage, Message, MessageReference, PartialEmoji, Snowflake, Status};
-use ferrocord_core::http::MessageAnchor;
-use ferrocord_core::store::{GuildListEntry, Store};
 use ferrocord_core::Client;
+use ferrocord_core::http::MessageAnchor;
+use ferrocord_core::model::{AllowedMentions, CreateMessage, Message, MessageReference, PartialEmoji, Snowflake, Status};
+use ferrocord_core::store::{GuildListEntry, Store};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -163,12 +163,8 @@ pub(crate) fn guild_channels(client: &Client, id: Snowflake) -> Res {
     if !s.guilds.contains_key(&id) {
         return Err(ApiError::not_found("unknown guild"));
     }
-    let list: Vec<Value> = s
-        .guild_channel_tree(id)
-        .into_iter()
-        .flat_map(|(cat, kids)| cat.into_iter().chain(kids))
-        .filter_map(|c| channel_json(&s, c.id))
-        .collect();
+    let list: Vec<Value> =
+        s.guild_channel_tree(id).into_iter().flat_map(|(cat, kids)| cat.into_iter().chain(kids)).filter_map(|c| channel_json(&s, c.id)).collect();
     Ok(Value::Array(list))
 }
 
@@ -192,8 +188,7 @@ pub(crate) async fn messages(client: &Client, channel: Snowflake, limit: Option<
             };
             // Only serve from cache when it holds a full page (or the start of the channel).
             let contiguous = before.is_none_or(|b| cm.has_latest || cm.messages.iter().any(|m| m.id >= b));
-            (contiguous && (older.len() >= limit || cm.reached_start))
-                .then(|| older.iter().rev().take(limit).map(|m| (*m).clone()).collect())
+            (contiguous && (older.len() >= limit || cm.reached_start)).then(|| older.iter().rev().take(limit).map(|m| (*m).clone()).collect())
         })
     };
     let page = match cached {

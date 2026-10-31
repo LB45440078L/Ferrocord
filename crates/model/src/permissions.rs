@@ -111,12 +111,7 @@ pub fn base_permissions(guild: &Guild, user_id: Snowflake, member_roles: &[Snowf
 }
 
 /// Applies channel overwrites on top of base permissions (everyone → roles → member).
-pub fn channel_permissions(
-    guild: &Guild,
-    channel: &Channel,
-    user_id: Snowflake,
-    member_roles: &[Snowflake],
-) -> Permissions {
+pub fn channel_permissions(guild: &Guild, channel: &Channel, user_id: Snowflake, member_roles: &[Snowflake]) -> Permissions {
     let base = base_permissions(guild, user_id, member_roles);
     if base.contains(Permissions::ADMINISTRATOR) || base == Permissions::all() {
         return Permissions::all();

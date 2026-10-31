@@ -34,12 +34,19 @@ enum Act {
 }
 
 pub fn chat(app: &mut App, ui: &mut Ui, channel: Snowflake) {
-    Panel::top("chat_header").exact_size(48.0).show_separator_line(false).frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(16, 0))).show(ui, |ui| {
-        header(app, ui, channel);
-    });
-    Panel::bottom("composer").resizable(false).show_separator_line(false).frame(egui::Frame::new().inner_margin(egui::Margin { left: 16, right: 16, top: 0, bottom: 4 })).show(ui, |ui| {
-        composer(app, ui, channel);
-    });
+    Panel::top("chat_header").exact_size(48.0).show_separator_line(false).frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(16, 0))).show(
+        ui,
+        |ui| {
+            header(app, ui, channel);
+        },
+    );
+    Panel::bottom("composer")
+        .resizable(false)
+        .show_separator_line(false)
+        .frame(egui::Frame::new().inner_margin(egui::Margin { left: 16, right: 16, top: 0, bottom: 4 }))
+        .show(ui, |ui| {
+            composer(app, ui, channel);
+        });
     egui::CentralPanel::no_frame().show(ui, |ui| {
         messages(app, ui, channel);
     });
@@ -100,6 +107,9 @@ fn header(app: &mut App, ui: &mut Ui, channel: Snowflake) {
                     app.client.update_config(|c| c.appearance.show_member_list = !show);
                 }
             }
+            if widgets::icon_button(ui, "🔍", "Search messages", &pal, false).clicked() {
+                app.modal = Some(Modal::Search { query: String::new(), results: None, searching: false });
+            }
             if widgets::icon_button(ui, "📌", "Pinned messages", &pal, false).clicked() {
                 app.modal = Some(Modal::Pins { channel, messages: None });
                 let tx = app.ext.pins_tx.clone();
@@ -107,7 +117,7 @@ fn header(app: &mut App, ui: &mut Ui, channel: Snowflake) {
                 app.client.runtime().spawn(async move {
                     let r = client.http().pins(channel).await;
                     let _ = tx.send((channel, r.map_err(|e| e.to_string())));
-                    client.emit(ferrocord_core::ClientEvent::MessagesLoaded { channel_id: channel });
+                    client.request_repaint();
                 });
             }
         });
@@ -127,7 +137,8 @@ fn build_rows(msgs: &[Message], marker: Option<Snowflake>) -> Vec<Row> {
     let mut marker_done = false;
     for (i, m) in msgs.iter().enumerate() {
         let prev = i.checked_sub(1).map(|j| &msgs[j]);
-        let day_break = prev.is_none_or(|p| p.created_at().date_naive() != m.created_at().date_naive());
+        let local_day = |x: &Message| x.created_at().with_timezone(&chrono::Local).date_naive();
+        let day_break = prev.is_none_or(|p| local_day(p) != local_day(m));
         let new_marker = !marker_done && marker.is_some_and(|mk| m.id > mk && prev.is_some_and(|p| p.id <= mk));
         if new_marker {
             marker_done = true;
@@ -377,10 +388,17 @@ fn message(app: &mut App, ui: &mut Ui, m: &Message, group_start: bool, acts: &mu
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 6.0;
                     if compact {
-                        ui.label(RichText::new(m.created_at().with_timezone(&chrono::Local).format(if use_24h { "%H:%M" } else { "%-I:%M %p" }).to_string()).size(11.5).color(pal.text_faint));
+                        ui.label(
+                            RichText::new(m.created_at().with_timezone(&chrono::Local).format(if use_24h { "%H:%M" } else { "%-I:%M %p" }).to_string())
+                                .size(11.5)
+                                .color(pal.text_faint),
+                        );
                     }
                     let name = app.client.store().display_name(guild, m.author.id);
-                    let r = ui.add(egui::Label::new(RichText::new(name).font(FontId::new(15.0, theme::bold())).color(author_color(app, guild, m.author.id))).sense(Sense::click()));
+                    let r = ui.add(
+                        egui::Label::new(RichText::new(name).font(FontId::new(15.0, theme::bold())).color(author_color(app, guild, m.author.id)))
+                            .sense(Sense::click()),
+                    );
                     if r.clicked() {
                         acts.push(Act::Profile(m.author.id, r.rect.right_top()));
                     }
@@ -561,18 +579,23 @@ fn attachment(app: &App, ui: &mut Ui, msg: Snowflake, a: &Attachment, acts: &mut
     } else {
         "📄"
     };
-    egui::Frame::new().fill(pal.bg_elevated).stroke(Stroke::new(1.0, pal.border)).corner_radius(CornerRadius::same(8)).inner_margin(egui::Margin::same(10)).show(ui, |ui| {
-        ui.set_max_width(420.0);
-        ui.horizontal(|ui| {
-            ui.label(RichText::new(icon).size(26.0));
-            ui.vertical(|ui| {
-                if ui.link(RichText::new(&a.filename).color(pal.link)).clicked() {
-                    acts.push(Act::Url(a.url.clone()));
-                }
-                ui.label(RichText::new(human_size(a.size)).size(12.0).color(pal.text_faint));
+    egui::Frame::new()
+        .fill(pal.bg_elevated)
+        .stroke(Stroke::new(1.0, pal.border))
+        .corner_radius(CornerRadius::same(8))
+        .inner_margin(egui::Margin::same(10))
+        .show(ui, |ui| {
+            ui.set_max_width(420.0);
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(icon).size(26.0));
+                ui.vertical(|ui| {
+                    if ui.link(RichText::new(&a.filename).color(pal.link)).clicked() {
+                        acts.push(Act::Url(a.url.clone()));
+                    }
+                    ui.label(RichText::new(human_size(a.size)).size(12.0).color(pal.text_faint));
+                });
             });
         });
-    });
 }
 
 fn human_size(b: u64) -> String {
@@ -599,10 +622,16 @@ fn embed(app: &mut App, ui: &mut Ui, m: &Message, e: &Embed, guild: Option<Snowf
             let (w, h) = (t.width.unwrap_or(300) as f32, t.height.unwrap_or(200) as f32);
             let scale = (400.0 / w).min(300.0 / h).min(1.0);
             let size = vec2(w * scale, h * scale);
-            let url = if e.kind.as_deref() == Some("gifv") { src.clone() } else { ferrocord_core::model::cdn::proxied_image(&src, (size.x * 2.0) as u32, (size.y * 2.0) as u32) };
+            let url = if e.kind.as_deref() == Some("gifv") {
+                src.clone()
+            } else {
+                ferrocord_core::model::cdn::proxied_image(&src, (size.x * 2.0) as u32, (size.y * 2.0) as u32)
+            };
             let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
             match app.images.get(&url) {
-                Some(img) => egui::Image::from_texture(egui::load::SizedTexture::new(img.texture, size)).corner_radius(CornerRadius::same(8)).paint_at(ui, rect),
+                Some(img) => {
+                    egui::Image::from_texture(egui::load::SizedTexture::new(img.texture, size)).corner_radius(CornerRadius::same(8)).paint_at(ui, rect)
+                }
                 None => {
                     ui.painter().rect_filled(rect, CornerRadius::same(8), pal.bg_elevated);
                 }
@@ -614,98 +643,103 @@ fn embed(app: &mut App, ui: &mut Ui, m: &Message, e: &Embed, guild: Option<Snowf
         return;
     }
     let bar = e.color.and_then(theme::role_color).unwrap_or(pal.border);
-    let resp = egui::Frame::new().fill(pal.bg_elevated).corner_radius(CornerRadius::same(6)).inner_margin(egui::Margin { left: 14, right: 12, top: 10, bottom: 10 }).show(ui, |ui| {
-        ui.set_max_width(480.0);
-        if let Some(p) = &e.provider
-            && let Some(n) = &p.name
-        {
-            ui.label(RichText::new(n).size(12.0).color(pal.text_faint));
-        }
-        if let Some(a) = &e.author {
-            ui.horizontal(|ui| {
-                if let Some(icon) = a.proxy_icon_url.as_ref().or(a.icon_url.as_ref()) {
-                    widgets::avatar(ui, &app.images, icon, 20.0, None, &pal);
-                }
-                let r = ui.add(egui::Label::new(RichText::new(&a.name).font(FontId::new(13.5, theme::bold()))).sense(Sense::click()));
+    let resp = egui::Frame::new()
+        .fill(pal.bg_elevated)
+        .corner_radius(CornerRadius::same(6))
+        .inner_margin(egui::Margin { left: 14, right: 12, top: 10, bottom: 10 })
+        .show(ui, |ui| {
+            ui.set_max_width(480.0);
+            if let Some(p) = &e.provider
+                && let Some(n) = &p.name
+            {
+                ui.label(RichText::new(n).size(12.0).color(pal.text_faint));
+            }
+            if let Some(a) = &e.author {
+                ui.horizontal(|ui| {
+                    if let Some(icon) = a.proxy_icon_url.as_ref().or(a.icon_url.as_ref()) {
+                        widgets::avatar(ui, &app.images, icon, 20.0, None, &pal);
+                    }
+                    let r = ui.add(egui::Label::new(RichText::new(&a.name).font(FontId::new(13.5, theme::bold()))).sense(Sense::click()));
+                    if r.clicked()
+                        && let Some(u) = &a.url
+                    {
+                        acts.push(Act::Url(u.clone()));
+                    }
+                });
+            }
+            if let Some(t) = &e.title {
+                let r = ui.add(
+                    egui::Label::new(RichText::new(t).font(FontId::new(15.0, theme::bold())).color(if e.url.is_some() { pal.link } else { pal.text }))
+                        .sense(Sense::click()),
+                );
                 if r.clicked()
-                    && let Some(u) = &a.url
+                    && let Some(u) = &e.url
                 {
                     acts.push(Act::Url(u.clone()));
                 }
-            });
-        }
-        if let Some(t) = &e.title {
-            let r = ui.add(egui::Label::new(RichText::new(t).font(FontId::new(15.0, theme::bold())).color(if e.url.is_some() { pal.link } else { pal.text })).sense(Sense::click()));
-            if r.clicked()
-                && let Some(u) = &e.url
-            {
-                acts.push(Act::Url(u.clone()));
             }
-        }
-        if let Some(d) = &e.description {
-            let blocks = app.parsed(Snowflake(m.id.0 ^ hash_str(d)), d);
-            let store = app.client.store();
-            let empty = HashSet::new();
-            let ctx = MdCtx { store: &store, guild, pal: &pal, images: &app.images, revealed: &empty, size: 14.0, use_24h: true, animate: true };
-            if let Some(MdAction::OpenUrl(u)) = markdown::render(ui, &blocks, &ctx) {
-                acts.push(Act::Url(u));
-            }
-        }
-        if !e.fields.is_empty() {
-            // Inline fields flow three per row; non-inline fields take a full row.
-            let full = ui.available_width();
-            let col = ((full - 24.0) / 3.0).max(80.0);
-            let mut i = 0;
-            while i < e.fields.len() {
-                let row: Vec<&ferrocord_core::model::EmbedField> = if e.fields[i].inline {
-                    e.fields[i..].iter().take_while(|f| f.inline).take(3).collect()
-                } else {
-                    vec![&e.fields[i]]
-                };
-                i += row.len();
-                ui.horizontal_top(|ui| {
-                    for f in &row {
-                        let w = if row.len() == 1 && !f.inline { full } else { col };
-                        ui.allocate_ui_with_layout(vec2(w, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
-                            ui.set_width(w);
-                            ui.label(RichText::new(&f.name).font(FontId::new(13.5, theme::bold())));
-                            let blocks = app.parsed(Snowflake(m.id.0 ^ hash_str(&f.value) ^ hash_str(&f.name)), &f.value);
-                            let store = app.client.store();
-                            let empty = HashSet::new();
-                            let ctx = MdCtx { store: &store, guild, pal: &pal, images: &app.images, revealed: &empty, size: 13.5, use_24h: true, animate: true };
-                            if let Some(MdAction::OpenUrl(u)) = markdown::render(ui, &blocks, &ctx) {
-                                acts.push(Act::Url(u));
-                            }
-                        });
-                    }
-                });
-                ui.add_space(4.0);
-            }
-        }
-        if inline_media
-            && let Some(img) = e.image.as_ref().or(e.thumbnail.as_ref())
-        {
-            let src = img.proxy_url.clone().unwrap_or(img.url.clone());
-            let (w, h) = (img.width.unwrap_or(400) as f32, img.height.unwrap_or(250) as f32);
-            let max = if e.image.is_some() { vec2(440.0, 300.0) } else { vec2(80.0, 80.0) };
-            let scale = (max.x / w).min(max.y / h).min(1.0);
-            let size = vec2(w * scale, h * scale);
-            let url = ferrocord_core::model::cdn::proxied_image(&src, (size.x * 2.0) as u32, (size.y * 2.0) as u32);
-            let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
-            match app.images.get(&url) {
-                Some(t) => egui::Image::from_texture(egui::load::SizedTexture::new(t.texture, size)).corner_radius(CornerRadius::same(4)).paint_at(ui, rect),
-                None => {
-                    ui.painter().rect_filled(rect, CornerRadius::same(4), pal.bg_selected);
+            if let Some(d) = &e.description {
+                let blocks = app.parsed(Snowflake(m.id.0 ^ hash_str(d)), d);
+                let store = app.client.store();
+                let empty = HashSet::new();
+                let ctx = MdCtx { store: &store, guild, pal: &pal, images: &app.images, revealed: &empty, size: 14.0, use_24h: true, animate: true };
+                if let Some(MdAction::OpenUrl(u)) = markdown::render(ui, &blocks, &ctx) {
+                    acts.push(Act::Url(u));
                 }
             }
-            if resp.clicked() {
-                acts.push(Act::Image(url, img.url.clone()));
+            if !e.fields.is_empty() {
+                // Inline fields flow three per row; non-inline fields take a full row.
+                let full = ui.available_width();
+                let col = ((full - 24.0) / 3.0).max(80.0);
+                let mut i = 0;
+                while i < e.fields.len() {
+                    let row: Vec<&ferrocord_core::model::EmbedField> =
+                        if e.fields[i].inline { e.fields[i..].iter().take_while(|f| f.inline).take(3).collect() } else { vec![&e.fields[i]] };
+                    i += row.len();
+                    ui.horizontal_top(|ui| {
+                        for f in &row {
+                            let w = if row.len() == 1 && !f.inline { full } else { col };
+                            ui.allocate_ui_with_layout(vec2(w, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                                ui.set_width(w);
+                                ui.label(RichText::new(&f.name).font(FontId::new(13.5, theme::bold())));
+                                let blocks = app.parsed(Snowflake(m.id.0 ^ hash_str(&f.value) ^ hash_str(&f.name)), &f.value);
+                                let store = app.client.store();
+                                let empty = HashSet::new();
+                                let ctx =
+                                    MdCtx { store: &store, guild, pal: &pal, images: &app.images, revealed: &empty, size: 13.5, use_24h: true, animate: true };
+                                if let Some(MdAction::OpenUrl(u)) = markdown::render(ui, &blocks, &ctx) {
+                                    acts.push(Act::Url(u));
+                                }
+                            });
+                        }
+                    });
+                    ui.add_space(4.0);
+                }
             }
-        }
-        if let Some(f) = &e.footer {
-            ui.label(RichText::new(&f.text).size(12.0).color(pal.text_faint));
-        }
-    });
+            if inline_media && let Some(img) = e.image.as_ref().or(e.thumbnail.as_ref()) {
+                let src = img.proxy_url.clone().unwrap_or(img.url.clone());
+                let (w, h) = (img.width.unwrap_or(400) as f32, img.height.unwrap_or(250) as f32);
+                let max = if e.image.is_some() { vec2(440.0, 300.0) } else { vec2(80.0, 80.0) };
+                let scale = (max.x / w).min(max.y / h).min(1.0);
+                let size = vec2(w * scale, h * scale);
+                let url = ferrocord_core::model::cdn::proxied_image(&src, (size.x * 2.0) as u32, (size.y * 2.0) as u32);
+                let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
+                match app.images.get(&url) {
+                    Some(t) => {
+                        egui::Image::from_texture(egui::load::SizedTexture::new(t.texture, size)).corner_radius(CornerRadius::same(4)).paint_at(ui, rect)
+                    }
+                    None => {
+                        ui.painter().rect_filled(rect, CornerRadius::same(4), pal.bg_selected);
+                    }
+                }
+                if resp.clicked() {
+                    acts.push(Act::Image(url, img.url.clone()));
+                }
+            }
+            if let Some(f) = &e.footer {
+                ui.label(RichText::new(&f.text).size(12.0).color(pal.text_faint));
+            }
+        });
     let r = resp.response.rect;
     ui.painter().rect_filled(Rect::from_min_size(r.min, vec2(4.0, r.height())), CornerRadius { nw: 6, sw: 6, ne: 0, se: 0 }, bar);
     ui.add_space(4.0);
@@ -723,22 +757,24 @@ fn reactions(app: &App, ui: &mut Ui, m: &Message, acts: &mut Vec<Act>) {
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
         for r in &m.reactions {
-            let (fill, stroke) = if r.me { (pal.accent.gamma_multiply(0.22), Stroke::new(1.0, pal.accent)) } else { (pal.bg_elevated, Stroke::new(1.0, Color32::TRANSPARENT)) };
-            let resp = egui::Frame::new().fill(fill).stroke(stroke).corner_radius(CornerRadius::same(8)).inner_margin(egui::Margin::symmetric(6, 2)).show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 4.0;
-                    let url = r.emoji.url(48).or_else(|| r.emoji.name.as_deref().and_then(markdown::twemoji_url));
-                    match url.and_then(|u| app.images.get(&u)) {
-                        Some(img) => {
-                            ui.add(egui::Image::from_texture(egui::load::SizedTexture::new(img.texture, Vec2::splat(18.0))));
+            let (fill, stroke) =
+                if r.me { (pal.accent.gamma_multiply(0.22), Stroke::new(1.0, pal.accent)) } else { (pal.bg_elevated, Stroke::new(1.0, Color32::TRANSPARENT)) };
+            let resp =
+                egui::Frame::new().fill(fill).stroke(stroke).corner_radius(CornerRadius::same(8)).inner_margin(egui::Margin::symmetric(6, 2)).show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 4.0;
+                        let url = r.emoji.url(48).or_else(|| r.emoji.name.as_deref().and_then(markdown::twemoji_url));
+                        match url.and_then(|u| app.images.get(&u)) {
+                            Some(img) => {
+                                ui.add(egui::Image::from_texture(egui::load::SizedTexture::new(img.texture, Vec2::splat(18.0))));
+                            }
+                            None => {
+                                ui.label(r.emoji.name.clone().unwrap_or_default());
+                            }
                         }
-                        None => {
-                            ui.label(r.emoji.name.clone().unwrap_or_default());
-                        }
-                    }
-                    ui.label(RichText::new(r.count.to_string()).size(13.0).color(if r.me { pal.text } else { pal.text_muted }));
+                        ui.label(RichText::new(r.count.to_string()).size(13.0).color(if r.me { pal.text } else { pal.text_muted }));
+                    });
                 });
-            });
             let resp = resp.response.interact(Sense::click()).on_hover_text(format!(":{}:", r.emoji.name.clone().unwrap_or_default()));
             if resp.clicked() {
                 acts.push(Act::React(m.id, r.emoji.clone()));
@@ -757,8 +793,12 @@ fn system_message(app: &App, ui: &mut Ui, m: &Message, acts: &mut Vec<Act>) {
     let (icon, text) = match m.kind {
         message_type::USER_JOIN => ("→", format!("{name} joined the server.")),
         message_type::CHANNEL_PINNED_MESSAGE => ("📌", format!("{name} pinned a message to this channel.")),
-        message_type::GUILD_BOOST | message_type::GUILD_BOOST_TIER_1 | message_type::GUILD_BOOST_TIER_2 | message_type::GUILD_BOOST_TIER_3 => ("💎", format!("{name} just boosted the server!")),
-        message_type::RECIPIENT_ADD => ("→", format!("{name} added {} to the group.", m.mentions.first().map(|u| u.display_name().to_string()).unwrap_or_default())),
+        message_type::GUILD_BOOST | message_type::GUILD_BOOST_TIER_1 | message_type::GUILD_BOOST_TIER_2 | message_type::GUILD_BOOST_TIER_3 => {
+            ("💎", format!("{name} just boosted the server!"))
+        }
+        message_type::RECIPIENT_ADD => {
+            ("→", format!("{name} added {} to the group.", m.mentions.first().map(|u| u.display_name().to_string()).unwrap_or_default()))
+        }
         message_type::RECIPIENT_REMOVE => ("←", format!("{name} left the group.")),
         message_type::CALL => ("📞", format!("{name} started a call.")),
         message_type::CHANNEL_NAME_CHANGE => ("✏", format!("{name} changed the channel name: {}", m.content)),
@@ -772,7 +812,8 @@ fn system_message(app: &App, ui: &mut Ui, m: &Message, acts: &mut Vec<Act>) {
         ui.label(RichText::new(icon).color(pal.text_faint));
         ui.add_space(GUTTER / 2.0 - 16.0);
         let r = ui.add(egui::Label::new(RichText::new(text).color(pal.text_muted)).sense(Sense::click()));
-        if r.clicked() && m.kind == message_type::CHANNEL_PINNED_MESSAGE
+        if r.clicked()
+            && m.kind == message_type::CHANNEL_PINNED_MESSAGE
             && let Some(id) = m.message_reference.as_ref().and_then(|r| r.message_id)
         {
             acts.push(Act::Jump(id));
@@ -799,22 +840,27 @@ fn toolbar(app: &App, ui: &mut Ui, rect: Rect, m: &Message, acts: &mut Vec<Act>)
     let w = buttons.len() as f32 * 30.0 + 8.0;
     let bar = Rect::from_min_size(pos2(rect.max.x - w - 16.0, rect.min.y - 14.0), vec2(w, 32.0));
     egui::Area::new(ui.scope_id().with(("toolbar", m.id))).fixed_pos(bar.min).order(egui::Order::Foreground).show(ui.ctx(), |ui| {
-        egui::Frame::new().fill(pal.bg_side).stroke(Stroke::new(1.0, pal.border)).corner_radius(CornerRadius::same(6)).inner_margin(egui::Margin::same(2)).show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 2.0;
-                for (icon, tip, k) in buttons {
-                    let r = widgets::icon_button(ui, icon, tip, &pal, false);
-                    if r.clicked() {
-                        match k {
-                            0 => acts.push(Act::Picker(m.id, r.rect.left_bottom())),
-                            1 => acts.push(Act::Reply(m.id)),
-                            2 => acts.push(Act::Edit(m.id, m.content.clone())),
-                            _ => acts.push(Act::Delete(m.id)),
+        egui::Frame::new()
+            .fill(pal.bg_side)
+            .stroke(Stroke::new(1.0, pal.border))
+            .corner_radius(CornerRadius::same(6))
+            .inner_margin(egui::Margin::same(2))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
+                    for (icon, tip, k) in buttons {
+                        let r = widgets::icon_button(ui, icon, tip, &pal, false);
+                        if r.clicked() {
+                            match k {
+                                0 => acts.push(Act::Picker(m.id, r.rect.left_bottom())),
+                                1 => acts.push(Act::Reply(m.id)),
+                                2 => acts.push(Act::Edit(m.id, m.content.clone())),
+                                _ => acts.push(Act::Delete(m.id)),
+                            }
                         }
                     }
-                }
+                });
             });
-        });
     });
 }
 
@@ -950,38 +996,48 @@ fn composer(app: &mut App, ui: &mut Ui, channel: Snowflake) {
     let (reply_to, editing) = app.composers.get(&channel).map(|c| (c.reply_to, c.editing)).unwrap_or((None, None));
     if let Some(r) = reply_to {
         let name = app.client.store().message(channel, r).map(|m| app.client.store().display_name(guild, m.author.id)).unwrap_or_default();
-        egui::Frame::new().fill(pal.bg_side).corner_radius(CornerRadius { nw: 8, ne: 8, sw: 0, se: 0 }).inner_margin(egui::Margin::symmetric(12, 6)).show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
-                ui.label(RichText::new("Replying to").size(13.0).color(pal.text_muted));
-                ui.label(RichText::new(name).size(13.0).strong());
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.small_button("×").clicked() {
-                        app.composers.entry(channel).or_default().reply_to = None;
-                    }
-                    let c = app.composers.entry(channel).or_default();
-                    let label = if c.reply_mention { "@ ON" } else { "@ OFF" };
-                    if ui.small_button(RichText::new(label).color(if c.reply_mention { pal.link } else { pal.text_faint })).on_hover_text("Mention the author").clicked() {
-                        c.reply_mention = !c.reply_mention;
-                    }
+        egui::Frame::new().fill(pal.bg_side).corner_radius(CornerRadius { nw: 8, ne: 8, sw: 0, se: 0 }).inner_margin(egui::Margin::symmetric(12, 6)).show(
+            ui,
+            |ui| {
+                ui.set_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("Replying to").size(13.0).color(pal.text_muted));
+                    ui.label(RichText::new(name).size(13.0).strong());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.small_button("×").clicked() {
+                            app.composers.entry(channel).or_default().reply_to = None;
+                        }
+                        let c = app.composers.entry(channel).or_default();
+                        let label = if c.reply_mention { "@ ON" } else { "@ OFF" };
+                        if ui
+                            .small_button(RichText::new(label).color(if c.reply_mention { pal.link } else { pal.text_faint }))
+                            .on_hover_text("Mention the author")
+                            .clicked()
+                        {
+                            c.reply_mention = !c.reply_mention;
+                        }
+                    });
                 });
-            });
-        });
+            },
+        );
     }
     if editing.is_some() {
-        egui::Frame::new().fill(pal.bg_side).corner_radius(CornerRadius { nw: 8, ne: 8, sw: 0, se: 0 }).inner_margin(egui::Margin::symmetric(12, 6)).show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
-                ui.label(RichText::new("Editing message — Enter to save, Esc to cancel").size(13.0).color(pal.text_muted));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.small_button("×").clicked() {
-                        let c = app.composers.entry(channel).or_default();
-                        c.editing = None;
-                        c.text.clear();
-                    }
+        egui::Frame::new().fill(pal.bg_side).corner_radius(CornerRadius { nw: 8, ne: 8, sw: 0, se: 0 }).inner_margin(egui::Margin::symmetric(12, 6)).show(
+            ui,
+            |ui| {
+                ui.set_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("Editing message — Enter to save, Esc to cancel").size(13.0).color(pal.text_muted));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.small_button("×").clicked() {
+                            let c = app.composers.entry(channel).or_default();
+                            c.editing = None;
+                            c.text.clear();
+                        }
+                    });
                 });
-            });
-        });
+            },
+        );
     }
 
     // Pending attachments.
@@ -1013,53 +1069,64 @@ fn composer(app: &mut App, ui: &mut Ui, channel: Snowflake) {
     let enter = !autocomplete_open && ui.input(|i| i.key_pressed(egui::Key::Enter) && !i.modifiers.shift);
     let up_edit = ui.input(|i| i.key_pressed(egui::Key::ArrowUp));
 
-    egui::Frame::new().fill(pal.bg_elevated).corner_radius(if reply_to.is_some() || editing.is_some() { CornerRadius { nw: 0, ne: 0, sw: 8, se: 8 } } else { CornerRadius::same(8) }).inner_margin(egui::Margin::symmetric(8, 4)).show(ui, |ui| {
-        ui.horizontal(|ui| {
-            if can_attach && widgets::icon_button(ui, "➕", "Upload a file", &pal, false).clicked()
-                && let Some(paths) = rfd::FileDialog::new().pick_files()
-            {
-                app.composers.entry(channel).or_default().files.extend(paths);
-            }
-            let avail = ui.available_width() - 40.0;
-            let c = app.composers.entry(channel).or_default();
-            let te = egui::TextEdit::multiline(&mut c.text)
-                .id(egui::Id::unique(("composer", channel)))
-                .hint_text(RichText::new(&placeholder).color(pal.text_faint))
-                .desired_rows(1)
-                .desired_width(avail)
-                .frame(egui::Frame::NONE)
-                .margin(vec2(4.0, 8.0))
-                .return_key(Some(egui::KeyboardShortcut::new(egui::Modifiers::SHIFT, egui::Key::Enter)))
-                .font(FontId::proportional(15.0));
-            let r = ui.add(te);
-            if r.changed() && !c.text.is_empty() && !c.text.starts_with('/') && !app.demo {
-                app.client.typing(channel);
-            }
-            if r.has_focus() && enter {
-                send = true;
-            }
-            // Up arrow in an empty box edits your last message.
-            let c = app.composers.entry(channel).or_default();
-            if r.has_focus() && up_edit && c.text.is_empty() && c.editing.is_none() {
-                let me = app.client.store().my_id();
-                let last = app.client.store().messages.get(&channel).and_then(|cm| cm.messages.iter().rev().find(|m| m.author.id == me).map(|m| (m.id, m.content.clone())));
-                if let Some((id, content)) = last {
-                    let c = app.composers.entry(channel).or_default();
-                    c.editing = Some(id);
-                    c.text = content;
+    egui::Frame::new()
+        .fill(pal.bg_elevated)
+        .corner_radius(if reply_to.is_some() || editing.is_some() { CornerRadius { nw: 0, ne: 0, sw: 8, se: 8 } } else { CornerRadius::same(8) })
+        .inner_margin(egui::Margin::symmetric(8, 4))
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                if can_attach
+                    && widgets::icon_button(ui, "➕", "Upload a file", &pal, false).clicked()
+                    && let Some(paths) = rfd::FileDialog::new().pick_files()
+                {
+                    app.composers.entry(channel).or_default().files.extend(paths);
                 }
-            }
-            if app.modal.is_none() && app.popup.is_none() && !ui.ctx().memory(|m| m.focused().is_some()) {
-                r.request_focus();
-            }
-            if widgets::icon_button(ui, "😀", "Emoji", &pal, false).clicked() {
-                app.popup = Some(Popup::EmojiPicker { target: EmojiTarget::Composer(channel), at: ui.min_rect().right_top() });
-            }
+                let avail = ui.available_width() - 40.0;
+                let c = app.composers.entry(channel).or_default();
+                let te = egui::TextEdit::multiline(&mut c.text)
+                    .id(egui::Id::unique(("composer", channel)))
+                    .hint_text(RichText::new(&placeholder).color(pal.text_faint))
+                    .desired_rows(1)
+                    .desired_width(avail)
+                    .frame(egui::Frame::NONE)
+                    .margin(vec2(4.0, 8.0))
+                    .return_key(Some(egui::KeyboardShortcut::new(egui::Modifiers::SHIFT, egui::Key::Enter)))
+                    .font(FontId::proportional(15.0));
+                let r = ui.add(te);
+                if r.changed() && !c.text.is_empty() && !c.text.starts_with('/') && !app.demo {
+                    app.client.typing(channel);
+                }
+                if r.has_focus() && enter {
+                    send = true;
+                }
+                // Up arrow in an empty box edits your last message.
+                let c = app.composers.entry(channel).or_default();
+                if r.has_focus() && up_edit && c.text.is_empty() && c.editing.is_none() {
+                    let me = app.client.store().my_id();
+                    let last = app
+                        .client
+                        .store()
+                        .messages
+                        .get(&channel)
+                        .and_then(|cm| cm.messages.iter().rev().find(|m| m.author.id == me).map(|m| (m.id, m.content.clone())));
+                    if let Some((id, content)) = last {
+                        let c = app.composers.entry(channel).or_default();
+                        c.editing = Some(id);
+                        c.text = content;
+                    }
+                }
+                if app.modal.is_none() && app.popup.is_none() && !ui.ctx().memory(|m| m.focused().is_some()) {
+                    r.request_focus();
+                }
+                if widgets::icon_button(ui, "😀", "Emoji", &pal, false).clicked() {
+                    app.popup = Some(Popup::EmojiPicker { target: EmojiTarget::Composer(channel), at: ui.min_rect().right_top() });
+                }
+            });
         });
-    });
 
     // Files dropped onto the window are attached.
-    let dropped: Vec<std::path::PathBuf> = ui.ctx().input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| !p.as_os_str().is_empty()).collect());
+    let dropped: Vec<std::path::PathBuf> =
+        ui.ctx().input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| !p.as_os_str().is_empty()).collect());
     if !dropped.is_empty() && can_attach {
         app.composers.entry(channel).or_default().files.extend(dropped);
     }
@@ -1099,11 +1166,7 @@ fn submit(app: &mut App, channel: Snowflake) {
         .iter()
         .filter_map(|p| {
             let data = std::fs::read(p).ok()?;
-            Some(ferrocord_core::http::FilePart {
-                filename: p.file_name()?.to_string_lossy().to_string(),
-                content_type: None,
-                data: std::sync::Arc::new(data),
-            })
+            Some(ferrocord_core::http::FilePart { filename: p.file_name()?.to_string_lossy().to_string(), content_type: None, data: std::sync::Arc::new(data) })
         })
         .collect();
     app.client.send_message(channel, text, reply, mention, parts);
@@ -1144,7 +1207,13 @@ fn suggestions(app: &App, channel: Snowflake, guild: Option<Snowflake>) -> Vec<S
             let Some(user) = s.user(u) else { continue };
             let dn = s.display_name(guild, u);
             if (user.username.to_lowercase().starts_with(&q) || dn.to_lowercase().starts_with(&q)) && seen.insert(u) {
-                out.push(Suggestion { label: dn.clone(), detail: user.username.clone(), insert: format!("@{} ", user.username), raw: Some(format!("<@{u}>")), icon: Some(user.avatar_url(32)) });
+                out.push(Suggestion {
+                    label: dn.clone(),
+                    detail: user.username.clone(),
+                    insert: format!("@{} ", user.username),
+                    raw: Some(format!("<@{u}>")),
+                    icon: Some(user.avatar_url(32)),
+                });
             }
         }
         for w in ["everyone", "here"] {
@@ -1170,7 +1239,13 @@ fn suggestions(app: &App, channel: Snowflake, guild: Option<Snowflake>) -> Vec<S
         for ch in s.channels.values().filter(|c| c.guild_id == guild && !c.kind.is_voice() && c.kind != ChannelType::GuildCategory) {
             let name = ch.name.clone().unwrap_or_default();
             if name.to_lowercase().starts_with(&q) && out.len() < 8 {
-                out.push(Suggestion { label: format!("#{name}"), detail: String::new(), insert: format!("#{name} "), raw: Some(format!("<#{}>", ch.id)), icon: None });
+                out.push(Suggestion {
+                    label: format!("#{name}"),
+                    detail: String::new(),
+                    insert: format!("#{name} "),
+                    raw: Some(format!("<#{}>", ch.id)),
+                    icon: None,
+                });
             }
         }
     } else if c.text.starts_with('/') && !c.text.contains(' ') {
@@ -1206,22 +1281,25 @@ fn autocomplete(app: &mut App, ui: &mut Ui, channel: Snowflake, guild: Option<Sn
     c.autocomplete_index = c.autocomplete_index.min(n - 1);
     let mut chosen = pick.then_some(c.autocomplete_index);
     let selected = c.autocomplete_index;
-    egui::Frame::new().fill(pal.bg_side).stroke(Stroke::new(1.0, pal.border)).corner_radius(CornerRadius::same(8)).inner_margin(egui::Margin::same(6)).show(ui, |ui| {
-        ui.set_width(ui.available_width());
-        for (i, s) in items.iter().enumerate() {
-            let (rect, resp) = widgets::list_row(ui, 30.0, i == selected, &pal);
-            let mut x = rect.min.x + 8.0;
-            if let Some(url) = &s.icon {
-                widgets::paint_avatar(ui, &app.images, url, Rect::from_min_size(pos2(x, rect.center().y - 10.0), Vec2::splat(20.0)), None, &pal);
-                x += 28.0;
+    egui::Frame::new().fill(pal.bg_side).stroke(Stroke::new(1.0, pal.border)).corner_radius(CornerRadius::same(8)).inner_margin(egui::Margin::same(6)).show(
+        ui,
+        |ui| {
+            ui.set_width(ui.available_width());
+            for (i, s) in items.iter().enumerate() {
+                let (rect, resp) = widgets::list_row(ui, 30.0, i == selected, &pal);
+                let mut x = rect.min.x + 8.0;
+                if let Some(url) = &s.icon {
+                    widgets::paint_avatar(ui, &app.images, url, Rect::from_min_size(pos2(x, rect.center().y - 10.0), Vec2::splat(20.0)), None, &pal);
+                    x += 28.0;
+                }
+                ui.painter().text(pos2(x, rect.center().y), egui::Align2::LEFT_CENTER, &s.label, FontId::proportional(14.0), pal.text);
+                ui.painter().text(pos2(rect.max.x - 8.0, rect.center().y), egui::Align2::RIGHT_CENTER, &s.detail, FontId::proportional(12.0), pal.text_faint);
+                if resp.clicked() {
+                    chosen = Some(i);
+                }
             }
-            ui.painter().text(pos2(x, rect.center().y), egui::Align2::LEFT_CENTER, &s.label, FontId::proportional(14.0), pal.text);
-            ui.painter().text(pos2(rect.max.x - 8.0, rect.center().y), egui::Align2::RIGHT_CENTER, &s.detail, FontId::proportional(12.0), pal.text_faint);
-            if resp.clicked() {
-                chosen = Some(i);
-            }
-        }
-    });
+        },
+    );
     if let Some(i) = chosen {
         let s = &items[i];
         let c = app.composers.entry(channel).or_default();

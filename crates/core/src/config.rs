@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
     /// Id of the account to auto-login with (token lives in the OS credential vault).
@@ -14,19 +14,6 @@ pub struct Config {
     pub api: ApiConfig,
     pub plugins: PluginConfig,
     pub privacy: Privacy,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            last_account: None,
-            appearance: Appearance::default(),
-            notifications: Notifications::default(),
-            api: ApiConfig::default(),
-            plugins: PluginConfig::default(),
-            privacy: Privacy::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -136,11 +123,7 @@ pub struct Paths {
 impl Paths {
     pub fn discover() -> Self {
         match directories::ProjectDirs::from("dev", "ferrocord", "Ferrocord") {
-            Some(d) => Self {
-                config_dir: d.config_dir().to_path_buf(),
-                data_dir: d.data_dir().to_path_buf(),
-                cache_dir: d.cache_dir().to_path_buf(),
-            },
+            Some(d) => Self { config_dir: d.config_dir().to_path_buf(), data_dir: d.data_dir().to_path_buf(), cache_dir: d.cache_dir().to_path_buf() },
             None => {
                 let base = std::env::current_dir().unwrap_or_default().join("ferrocord-data");
                 Self { config_dir: base.clone(), data_dir: base.clone(), cache_dir: base.join("cache") }

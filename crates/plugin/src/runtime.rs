@@ -20,9 +20,9 @@ use parking_lot::{Mutex, RwLock};
 use serde::Serialize;
 use serde_json::{Value, json};
 
+use crate::PluginError;
 use crate::manifest::{Permission, PluginManifest};
 use crate::storage::{STORAGE_FILE, Storage};
-use crate::PluginError;
 
 /// Time a single Lua callback (event handler, command, timer) may run.
 pub const CALLBACK_BUDGET: Duration = Duration::from_millis(250);
@@ -294,10 +294,7 @@ impl Ctx {
             s.pop_front();
         }
         if s.len() >= SEND_LIMIT {
-            return Err(mlua::Error::runtime(format!(
-                "rate limited: at most {SEND_LIMIT} messages per {}s",
-                SEND_WINDOW.as_secs()
-            )));
+            return Err(mlua::Error::runtime(format!("rate limited: at most {SEND_LIMIT} messages per {}s", SEND_WINDOW.as_secs())));
         }
         s.push_back(now);
         Ok(())
@@ -394,12 +391,7 @@ impl Runtime {
         }
         let src = std::fs::read_to_string(&path).map_err(|e| format!("cannot read {}: {e}", self.ctx.manifest.entry))?;
         self.ctx.deadline.set(Some(Instant::now() + LOAD_BUDGET));
-        let r = self
-            .lua
-            .load(src.as_str())
-            .set_name(format!("={}/{}", self.ctx.manifest.id, self.ctx.manifest.entry))
-            .set_mode(ChunkMode::Text)
-            .exec();
+        let r = self.lua.load(src.as_str()).set_name(format!("={}/{}", self.ctx.manifest.id, self.ctx.manifest.entry)).set_mode(ChunkMode::Text).exec();
         self.ctx.deadline.set(None);
         r.map_err(|e| e.to_string())
     }
@@ -430,8 +422,7 @@ impl Runtime {
 
     fn run_due_timers(&self) {
         let now = Instant::now();
-        let mut due: Vec<(Instant, u64)> =
-            self.ctx.timers.borrow().iter().filter(|(_, t)| t.due <= now).map(|(id, t)| (t.due, *id)).collect();
+        let mut due: Vec<(Instant, u64)> = self.ctx.timers.borrow().iter().filter(|(_, t)| t.due <= now).map(|(id, t)| (t.due, *id)).collect();
         due.sort();
         for (_, id) in due {
             let func = {
@@ -606,10 +597,7 @@ fn build_api(lua: &Lua, ctx: &Rc<Ctx>) -> mlua::Result<Table> {
     )?;
 
     let s = shared.clone();
-    api.set(
-        "has_permission",
-        lua.create_function(move |_, name: String| Ok(name.parse::<Permission>().is_ok_and(|p| s.has(p))))?,
-    )?;
+    api.set("has_permission", lua.create_function(move |_, name: String| Ok(name.parse::<Permission>().is_ok_and(|p| s.has(p))))?)?;
 
     let c = ctx.clone();
     api.set("after", lua.create_function(move |_, (ms, f): (f64, Function)| c.add_timer(ms, false, f))?)?;
@@ -642,9 +630,7 @@ fn build_api(lua: &Lua, ctx: &Rc<Ctx>) -> mlua::Result<Table> {
             lua.create_function(move |_, (name, f): (String, Function)| {
                 let name = name.trim().to_ascii_uppercase();
                 if name != "*" && !c.shared.may_receive(&name) {
-                    return Err(mlua::Error::runtime(format!(
-                        "not permitted to receive {name} (requires the events.all permission)"
-                    )));
+                    return Err(mlua::Error::runtime(format!("not permitted to receive {name} (requires the events.all permission)")));
                 }
                 c.handlers.borrow_mut().entry(name.clone()).or_default().push(f);
                 c.shared.events.write().insert(name);
@@ -874,12 +860,8 @@ fn build_state(lua: &Lua, ctx: &Rc<Ctx>) -> mlua::Result<Table> {
         lua.create_function(move |lua, id: LuaValue| {
             let id = snowflake(&id, "guild_id")?;
             let s = c.client.store();
-            let v: Vec<Value> = s
-                .guild_channel_tree(id)
-                .into_iter()
-                .flat_map(|(cat, kids)| cat.into_iter().chain(kids))
-                .filter_map(|ch| channel_json(&s, ch.id))
-                .collect();
+            let v: Vec<Value> =
+                s.guild_channel_tree(id).into_iter().flat_map(|(cat, kids)| cat.into_iter().chain(kids)).filter_map(|ch| channel_json(&s, ch.id)).collect();
             to_lua(lua, &Value::Array(v))
         })?,
     )?;
@@ -1015,7 +997,14 @@ fn build_http(lua: &Lua, ctx: &Rc<Ctx>) -> mlua::Result<Table> {
     t.set(
         "get",
         lua.create_function(move |_, (url, cb): (String, Function)| {
-            let req = HttpRequest { method: reqwest::Method::GET, url: parse_url(&url)?, headers: vec![], body: None, content_type: None, timeout: Duration::from_secs(30) };
+            let req = HttpRequest {
+                method: reqwest::Method::GET,
+                url: parse_url(&url)?,
+                headers: vec![],
+                body: None,
+                content_type: None,
+                timeout: Duration::from_secs(30),
+            };
             http_spawn(&c, req, cb)
         })?,
     )?;
@@ -1025,7 +1014,8 @@ fn build_http(lua: &Lua, ctx: &Rc<Ctx>) -> mlua::Result<Table> {
         "post",
         lua.create_function(move |lua, (url, body, cb): (String, LuaValue, Function)| {
             let (body, content_type) = http_body(lua, body)?;
-            let req = HttpRequest { method: reqwest::Method::POST, url: parse_url(&url)?, headers: vec![], body, content_type, timeout: Duration::from_secs(30) };
+            let req =
+                HttpRequest { method: reqwest::Method::POST, url: parse_url(&url)?, headers: vec![], body, content_type, timeout: Duration::from_secs(30) };
             http_spawn(&c, req, cb)
         })?,
     )?;
@@ -1070,11 +1060,8 @@ fn http_spawn(ctx: &Rc<Ctx>, req: HttpRequest, cb: Function) -> mlua::Result<()>
         }
         let mut resp = rb.send().await.map_err(|e| e.to_string())?;
         let status = resp.status().as_u16();
-        let headers: serde_json::Map<String, Value> = resp
-            .headers()
-            .iter()
-            .filter_map(|(k, v)| Some((k.as_str().to_string(), Value::String(v.to_str().ok()?.to_string()))))
-            .collect();
+        let headers: serde_json::Map<String, Value> =
+            resp.headers().iter().filter_map(|(k, v)| Some((k.as_str().to_string(), Value::String(v.to_str().ok()?.to_string())))).collect();
         let mut body = Vec::new();
         while let Some(chunk) = resp.chunk().await.map_err(|e| e.to_string())? {
             body.extend_from_slice(&chunk);

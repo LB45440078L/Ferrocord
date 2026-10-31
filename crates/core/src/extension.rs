@@ -80,10 +80,8 @@ impl Extension for BuiltinCommands {
     }
 
     fn commands(&self) -> Vec<LocalCommand> {
-        let mut v: Vec<LocalCommand> = Self::SIMPLE
-            .iter()
-            .map(|(n, d, _)| LocalCommand { name: (*n).into(), description: (*d).into(), owner: self.id().into() })
-            .collect();
+        let mut v: Vec<LocalCommand> =
+            Self::SIMPLE.iter().map(|(n, d, _)| LocalCommand { name: (*n).into(), description: (*d).into(), owner: self.id().into() }).collect();
         v.push(LocalCommand { name: "me".into(), description: "Displays text with emphasis".into(), owner: self.id().into() });
         v.push(LocalCommand { name: "spoiler".into(), description: "Marks your message as a spoiler".into(), owner: self.id().into() });
         v.push(LocalCommand { name: "nick".into(), description: "Change your nickname on this server".into(), owner: self.id().into() });

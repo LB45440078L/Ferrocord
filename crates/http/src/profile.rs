@@ -146,13 +146,7 @@ fn os_version_string() -> String {
 
 #[cfg(not(windows))]
 fn os_version_string() -> String {
-    std::process::Command::new("uname")
-        .arg("-r")
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .map(|s| s.trim().to_string())
-        .unwrap_or_default()
+    std::process::Command::new("uname").arg("-r").output().ok().and_then(|o| String::from_utf8(o.stdout).ok()).map(|s| s.trim().to_string()).unwrap_or_default()
 }
 
 /// Scrapes the current `BUILD_NUMBER` from the web app HTML so our fingerprint

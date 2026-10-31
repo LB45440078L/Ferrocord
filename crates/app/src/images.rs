@@ -140,10 +140,10 @@ impl ImageCache {
     pub fn insert_local(&self, key: &str, img: ColorImage) {
         let size = Vec2::new(img.size[0] as f32, img.size[1] as f32);
         let tex = self.inner.ctx.load_texture(key, img, TextureOptions::NEAREST);
-        self.inner.entries.lock().insert(
-            key.to_string(),
-            Entry::Ready(Frames { frames: vec![(tex, Duration::ZERO)], total: Duration::ZERO, size, last_used: Instant::now() }),
-        );
+        self.inner
+            .entries
+            .lock()
+            .insert(key.to_string(), Entry::Ready(Frames { frames: vec![(tex, Duration::ZERO)], total: Duration::ZERO, size, last_used: Instant::now() }));
     }
 
     fn cache_path(&self, url: &str) -> PathBuf {
@@ -246,7 +246,7 @@ fn collect_frames(frames: image::Frames<'_>) -> Vec<(image::RgbaImage, Duration)
         .filter_map(Result::ok)
         .map(|f| {
             let (n, d) = f.delay().numer_denom_ms();
-            let ms = if d == 0 { 100 } else { n / d };
+            let ms = n.checked_div(d).unwrap_or(100);
             (f.into_buffer(), Duration::from_millis(ms as u64))
         })
         .collect()

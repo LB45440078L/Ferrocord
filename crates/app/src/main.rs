@@ -24,8 +24,11 @@ fn main() -> anyhow::Result<()> {
         captcha::run_helper(args.get(2).cloned());
     }
     if args.iter().any(|a| a == "--help" || a == "-h") {
-        println!("Ferrocord {}\n\nUSAGE:\n  ferrocord [--demo]\n\nOPTIONS:\n  --demo               Explore the UI with offline sample data (no login)
-  --demo-view <VIEW>   Demo mode opened on a view: settings, emoji, friends, quick, dm\n\nENVIRONMENT:\n  RUST_LOG  Log filter, e.g. RUST_LOG=ferrocord=debug", env!("CARGO_PKG_VERSION"));
+        println!(
+            "Ferrocord {}\n\nUSAGE:\n  ferrocord [--demo]\n\nOPTIONS:\n  --demo               Explore the UI with offline sample data (no login)
+  --demo-view <VIEW>   Demo mode opened on a view: settings, emoji, friends, quick, dm\n\nENVIRONMENT:\n  RUST_LOG  Log filter, e.g. RUST_LOG=ferrocord=debug",
+            env!("CARGO_PKG_VERSION")
+        );
         return Ok(());
     }
     let demo = args.iter().any(|a| a == "--demo" || a == "--demo-view");
@@ -68,7 +71,9 @@ fn app_icon() -> egui::IconData {
             let (fx, fy) = (x as f32 - 31.5, y as f32 - 31.5);
             // Superellipse |x|^4 + |y|^4 <= r^4.
             let inside = (fx.abs() / 31.0).powi(4) + (fy.abs() / 31.0).powi(4) <= 1.0;
-            let glyph = (18..=26).contains(&x) && (14..=50).contains(&y) || (18..=46).contains(&x) && (14..=21).contains(&y) || (18..=40).contains(&x) && (29..=35).contains(&y);
+            let glyph = (18..=26).contains(&x) && (14..=50).contains(&y)
+                || (18..=46).contains(&x) && (14..=21).contains(&y)
+                || (18..=40).contains(&x) && (29..=35).contains(&y);
             let i = (y * n + x) * 4;
             if inside {
                 let (r, g, b) = if glyph { (255, 255, 255) } else { (0xe0, 0x6b, 0x2b) };

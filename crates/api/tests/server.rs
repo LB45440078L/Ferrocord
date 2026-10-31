@@ -208,9 +208,7 @@ async fn websocket_events_and_rpc() {
     assert_eq!(r["id"], 1);
     assert_eq!(r["result"]["api_version"], 1);
 
-    ws.send(Message::Text(json!({"id": "two", "method": "send_message", "params": {"channel_id": "1", "content": "x"}}).to_string().into()))
-        .await
-        .unwrap();
+    ws.send(Message::Text(json!({"id": "two", "method": "send_message", "params": {"channel_id": "1", "content": "x"}}).to_string().into())).await.unwrap();
     let r = recv(&mut ws).await;
     assert_eq!(r["id"], "two");
     assert_eq!(r["error"]["code"], "actions_disabled");

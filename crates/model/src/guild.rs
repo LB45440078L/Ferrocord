@@ -122,12 +122,7 @@ impl Guild {
 
     /// Short initials used as an icon fallback ("Rust Programming" -> "RP").
     pub fn acronym(&self) -> String {
-        self.props
-            .name
-            .split_whitespace()
-            .filter_map(|w| w.chars().next())
-            .take(4)
-            .collect()
+        self.props.name.split_whitespace().filter_map(|w| w.chars().next()).take(4).collect()
     }
 
     pub fn everyone_role(&self) -> Option<&Role> {

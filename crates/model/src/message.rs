@@ -147,8 +147,7 @@ pub struct Attachment {
 
 impl Attachment {
     pub fn is_image(&self) -> bool {
-        self.content_type.as_deref().is_some_and(|c| c.starts_with("image/"))
-            || (self.width.is_some() && !self.is_video())
+        self.content_type.as_deref().is_some_and(|c| c.starts_with("image/")) || (self.width.is_some() && !self.is_video())
     }
 
     pub fn is_video(&self) -> bool {
@@ -293,10 +292,6 @@ pub struct AllowedMentions {
 impl AllowedMentions {
     /// The client default: parse everything, ping the replied user.
     pub fn all(replied_user: bool) -> Self {
-        Self {
-            parse: vec!["users".into(), "roles".into(), "everyone".into()],
-            replied_user,
-            ..Default::default()
-        }
+        Self { parse: vec!["users".into(), "roles".into(), "everyone".into()], replied_user, ..Default::default() }
     }
 }

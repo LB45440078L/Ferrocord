@@ -93,10 +93,7 @@ impl fmt::Display for Permission {
 impl FromStr for Permission {
     type Err = PluginError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Permission::ALL
-            .into_iter()
-            .find(|p| p.as_str() == s.trim())
-            .ok_or_else(|| PluginError::UnknownPermission(s.to_string()))
+        Permission::ALL.into_iter().find(|p| p.as_str() == s.trim()).ok_or_else(|| PluginError::UnknownPermission(s.to_string()))
     }
 }
 
@@ -149,21 +146,13 @@ impl PluginManifest {
 
     fn validate(&self) -> Result<(), PluginError> {
         if !is_valid_id(&self.id) {
-            return Err(PluginError::Manifest(format!(
-                "invalid id `{}` (use 1-64 lowercase letters, digits, `-`, `_` or `.`)",
-                self.id
-            )));
+            return Err(PluginError::Manifest(format!("invalid id `{}` (use 1-64 lowercase letters, digits, `-`, `_` or `.`)", self.id)));
         }
         let entry = Path::new(&self.entry);
-        let safe = !self.entry.is_empty()
-            && !self.entry.contains(':')
-            && entry.components().all(|c| matches!(c, Component::Normal(_)));
+        let safe = !self.entry.is_empty() && !self.entry.contains(':') && entry.components().all(|c| matches!(c, Component::Normal(_)));
         let ext_ok = entry.extension().is_some_and(|e| e == "lua" || e == "luau");
         if !safe || !ext_ok {
-            return Err(PluginError::Manifest(format!(
-                "invalid entry `{}` (must be a relative .lua/.luau path inside the plugin directory)",
-                self.entry
-            )));
+            return Err(PluginError::Manifest(format!("invalid entry `{}` (must be a relative .lua/.luau path inside the plugin directory)", self.entry)));
         }
         Ok(())
     }

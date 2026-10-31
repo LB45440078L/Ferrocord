@@ -28,7 +28,12 @@ fn user(id: u64, name: &str, global: &str, bot: bool) -> Value {
 }
 
 pub fn populate(client: &Client) {
-    let users = vec![user(1001, "alice", "Alice", false), user(1002, "bob", "Bob", false), user(1003, "ferris", "Ferris", false), user(1004, "helper", "Helper Bot", true)];
+    let users = vec![
+        user(1001, "alice", "Alice", false),
+        user(1002, "bob", "Bob", false),
+        user(1003, "ferris", "Ferris", false),
+        user(1004, "helper", "Helper Bot", true),
+    ];
     let ready = json!({
         "v": 9,
         "session_id": "demo",
@@ -80,9 +85,7 @@ pub fn populate(client: &Client) {
         };
         members.push((uid, roles, status, acts));
     }
-    let item = |uid: u64, roles: &Vec<u64>, status: &str, acts: &Value| {
-        json!({ "member": { "user": { "id": sid(uid) }, "roles": roles.iter().map(|r| sid(*r)).collect::<Vec<_>>(), "presence": { "status": status, "activities": acts, "user": { "id": sid(uid) } } } })
-    };
+    let item = |uid: u64, roles: &Vec<u64>, status: &str, acts: &Value| json!({ "member": { "user": { "id": sid(uid) }, "roles": roles.iter().map(|r| sid(*r)).collect::<Vec<_>>(), "presence": { "status": status, "activities": acts, "user": { "id": sid(uid) } } } });
     let mut items = vec![json!({ "group": { "id": sid(GUILD + 1), "count": 1 } })];
     items.push(item(members[0].0, &members[0].1, members[0].2, &members[0].3));
     items.push(json!({ "group": { "id": "online", "count": 3 } }));
@@ -120,21 +123,66 @@ pub fn populate(client: &Client) {
     let welcome_id = mid(1500, 0);
     let general = vec![
         msg(mid(1500, 9), GENERAL, ferris.clone(), "", json!({ "type": 7 })),
-        msg(welcome_id, GENERAL, alice.clone(), "# Welcome to the lounge 👋\nThis server is a **demo** of _Ferrocord_ — a fast, open-source Discord client written in Rust.\n> Everything here is local sample data.\n> Try hovering messages, right-clicking, and the emoji picker.", json!({ "reactions": [{ "count": 3, "me": true, "emoji": { "id": null, "name": "🎉" } }, { "count": 1, "me": false, "emoji": { "id": null, "name": "🦀" } }] })),
-        msg(mid(1499, 0), GENERAL, alice.clone(), "Markdown showcase: **bold**, *italic*, __underline__, ~~strike~~, `inline code`, ||spoiler (click me)||, and a link: https://www.rust-lang.org", json!({})),
+        msg(
+            welcome_id,
+            GENERAL,
+            alice.clone(),
+            "# Welcome to the lounge 👋\nThis server is a **demo** of _Ferrocord_ — a fast, open-source Discord client written in Rust.\n> Everything here is local sample data.\n> Try hovering messages, right-clicking, and the emoji picker.",
+            json!({ "reactions": [{ "count": 3, "me": true, "emoji": { "id": null, "name": "🎉" } }, { "count": 1, "me": false, "emoji": { "id": null, "name": "🦀" } }] }),
+        ),
+        msg(
+            mid(1499, 0),
+            GENERAL,
+            alice.clone(),
+            "Markdown showcase: **bold**, *italic*, __underline__, ~~strike~~, `inline code`, ||spoiler (click me)||, and a link: https://www.rust-lang.org",
+            json!({}),
+        ),
         msg(mid(1498, 0), GENERAL, alice.clone(), "```rust\nfn main() {\n    println!(\"Hello from Ferrocord!\");\n}\n```", json!({})),
         msg(mid(60, 0), GENERAL, bob.clone(), "Is it fast? 🤔", json!({})),
-        msg(mid(59, 0), GENERAL, ferris.clone(), "Very. Immediate-mode UI, virtualized lists, zero-copy event parsing 🚀\n- ~30 MB RAM idle\n- starts in under a second\n- plugins in sandboxed Luau", json!({})),
-        msg(mid(58, 0), GENERAL, bob.clone(), "nice!! 😄😄", json!({ "type": 19, "message_reference": { "message_id": sid(mid(59, 0)), "channel_id": sid(GENERAL) }, "referenced_message": serde_json::to_value(msg(mid(59, 0), GENERAL, ferris.clone(), "Very. Immediate-mode UI, virtualized lists, zero-copy event parsing 🚀", json!({}))).unwrap() })),
-        msg(mid(10, 0), GENERAL, bot.clone(), "", json!({ "embeds": [{ "title": "Build passed ✅", "description": "All **42** tests passed on `main`.", "color": 0x3ba55d, "fields": [{ "name": "Duration", "value": "1m 12s", "inline": true }, { "name": "Commit", "value": "`a1b2c3d`", "inline": true }], "footer": { "text": "CI · just now" } }] })),
-        msg(mid(1, 20), GENERAL, alice.clone(), &format!("<@{ME}> want to try the quick switcher? Press **Ctrl+K** 😉 — server time is <t:{}:R>", chrono::Utc::now().timestamp() - 3600), json!({ "mentions": [me.clone()] })),
+        msg(
+            mid(59, 0),
+            GENERAL,
+            ferris.clone(),
+            "Very. Immediate-mode UI, virtualized lists, zero-copy event parsing 🚀\n- window up in ~0.2 s\n- ~90 MB RAM in this demo\n- plugins in sandboxed Luau",
+            json!({}),
+        ),
+        msg(
+            mid(58, 0),
+            GENERAL,
+            bob.clone(),
+            "nice!! 😄😄",
+            json!({ "type": 19, "message_reference": { "message_id": sid(mid(59, 0)), "channel_id": sid(GENERAL) }, "referenced_message": serde_json::to_value(msg(mid(59, 0), GENERAL, ferris.clone(), "Very. Immediate-mode UI, virtualized lists, zero-copy event parsing 🚀", json!({}))).unwrap() }),
+        ),
+        msg(
+            mid(10, 0),
+            GENERAL,
+            bot.clone(),
+            "",
+            json!({ "embeds": [{ "title": "Build passed ✅", "description": "All **42** tests passed on `main`.", "color": 0x3ba55d, "fields": [{ "name": "Duration", "value": "1m 12s", "inline": true }, { "name": "Commit", "value": "`a1b2c3d`", "inline": true }], "footer": { "text": "CI · just now" } }] }),
+        ),
+        msg(
+            mid(1, 20),
+            GENERAL,
+            alice.clone(),
+            &format!("<@{ME}> want to try the quick switcher? Press **Ctrl+K** 😉 — server time is <t:{}:R>", chrono::Utc::now().timestamp() - 3600),
+            json!({ "mentions": [me.clone()] }),
+        ),
     ];
     let rust = vec![
         msg(mid(31, 0), RUST, bob.clone(), "How do I share state between threads?", json!({})),
-        msg(mid(30, 0), RUST, ferris.clone(), "Wrap it in `Arc<Mutex<T>>`, or use channels:\n```rust\nlet (tx, rx) = std::sync::mpsc::channel();\n```", json!({})),
+        msg(
+            mid(30, 0),
+            RUST,
+            ferris.clone(),
+            "Wrap it in `Arc<Mutex<T>>`, or use channels:\n```rust\nlet (tx, rx) = std::sync::mpsc::channel();\n```",
+            json!({}),
+        ),
     ];
     let announce = vec![msg(mid(600, 0), ANNOUNCE, alice.clone(), "📢 Ferrocord **0.1** is out! Grab it from the releases page.", json!({}))];
-    let dm = vec![msg(mid(6, 0), DM, ferris.clone(), "hey! sent you a friend request 🦀", json!({})), msg(mid(5, 0), DM, me.clone(), "accepting in a sec!", json!({}))];
+    let dm = vec![
+        msg(mid(6, 0), DM, ferris.clone(), "hey! sent you a friend request 🦀", json!({})),
+        msg(mid(5, 0), DM, me.clone(), "accepting in a sec!", json!({})),
+    ];
 
     let mut s = client.store_mut();
     for (ch, list) in [(GENERAL, general), (RUST, rust), (ANNOUNCE, announce), (DM, dm)] {

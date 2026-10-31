@@ -8,12 +8,19 @@ use crate::theme;
 use crate::widgets;
 
 pub fn sidebar(app: &mut App, ui: &mut Ui) {
-    Panel::bottom("account").exact_size(56.0).show_separator_line(false).frame(egui::Frame::new().fill(app.pal.bg_rail.lerp_to_gamma(app.pal.bg_side, 0.5))).show(ui, |ui| {
-        account_panel(app, ui);
-    });
-    Panel::top("sidebar_header").exact_size(48.0).show_separator_line(false).frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(12, 0))).show(ui, |ui| {
-        header(app, ui);
-    });
+    Panel::bottom("account")
+        .exact_size(56.0)
+        .show_separator_line(false)
+        .frame(egui::Frame::new().fill(app.pal.bg_rail.lerp_to_gamma(app.pal.bg_side, 0.5)))
+        .show(ui, |ui| {
+            account_panel(app, ui);
+        });
+    Panel::top("sidebar_header").exact_size(48.0).show_separator_line(false).frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(12, 0))).show(
+        ui,
+        |ui| {
+            header(app, ui);
+        },
+    );
     egui::CentralPanel::no_frame().show(ui, |ui| {
         egui::ScrollArea::vertical().id_salt("channels").auto_shrink([false, false]).show(ui, |ui| {
             ui.add_space(6.0);
@@ -36,7 +43,9 @@ fn header(app: &mut App, ui: &mut Ui) {
             ui.label(RichText::new(name).font(FontId::new(15.5, theme::bold())));
         }
         None => {
-            let b = egui::Button::new(RichText::new("Find or start a conversation").small().color(pal.text_faint)).fill(pal.bg_rail).min_size(vec2(ui.available_width(), 28.0));
+            let b = egui::Button::new(RichText::new("Find or start a conversation").small().color(pal.text_faint))
+                .fill(pal.bg_rail)
+                .min_size(vec2(ui.available_width(), 28.0));
             if ui.add(b).clicked() {
                 app.modal = Some(Modal::QuickSwitcher { query: String::new(), index: 0 });
             }
@@ -51,7 +60,12 @@ fn guild_channels(app: &mut App, ui: &mut Ui, guild: Snowflake) {
             let collapsed = app.collapsed.contains(&cat.id);
             ui.add_space(10.0);
             let name = cat.name.clone().unwrap_or_default().to_uppercase();
-            let resp = ui.add(egui::Label::new(RichText::new(format!("{} {name}", if collapsed { "›" } else { "⌄" })).font(FontId::new(11.5, theme::bold())).color(app.pal.text_faint)).sense(Sense::click()));
+            let resp = ui.add(
+                egui::Label::new(
+                    RichText::new(format!("{} {name}", if collapsed { "›" } else { "⌄" })).font(FontId::new(11.5, theme::bold())).color(app.pal.text_faint),
+                )
+                .sense(Sense::click()),
+            );
             if resp.clicked() {
                 if collapsed {
                     app.collapsed.remove(&cat.id);
@@ -129,7 +143,8 @@ fn channel_row(app: &mut App, ui: &mut Ui, c: &Channel, indent: f32) {
     if resp.clicked() && !c.kind.is_voice() {
         app.select_channel(c.id);
     }
-    let resp = if let Some(topic) = c.topic.as_ref().filter(|t| !t.is_empty()) { resp.on_hover_text(topic.chars().take(300).collect::<String>()) } else { resp };
+    let resp =
+        if let Some(topic) = c.topic.as_ref().filter(|t| !t.is_empty()) { resp.on_hover_text(topic.chars().take(300).collect::<String>()) } else { resp };
     let client = app.client.clone();
     let (id, guild) = (c.id, c.guild_id);
     resp.context_menu(|ui| {
@@ -181,7 +196,13 @@ fn dm_list(app: &mut App, ui: &mut Ui) {
     let selected_home = app.nav.channel.is_none();
     let (rect, resp) = widgets::list_row(ui, 40.0, selected_home, &pal);
     ui.painter().text(pos2(rect.min.x + 22.0, rect.center().y), egui::Align2::CENTER_CENTER, "👥", FontId::proportional(18.0), pal.text_muted);
-    ui.painter().text(pos2(rect.min.x + 44.0, rect.center().y), egui::Align2::LEFT_CENTER, "Friends", FontId::new(15.0, theme::bold()), if selected_home { pal.text } else { pal.text_muted });
+    ui.painter().text(
+        pos2(rect.min.x + 44.0, rect.center().y),
+        egui::Align2::LEFT_CENTER,
+        "Friends",
+        FontId::new(15.0, theme::bold()),
+        if selected_home { pal.text } else { pal.text_muted },
+    );
     let pending = app.client.store().relationships.values().filter(|r| r.kind == ferrocord_core::model::RelationshipType::IncomingRequest).count() as u32;
     if pending > 0 {
         widgets::count_badge(ui, pos2(rect.max.x - 8.0, rect.center().y), pending, &pal);
@@ -195,7 +216,9 @@ fn dm_list(app: &mut App, ui: &mut Ui) {
     widgets::section_label(ui, "Direct Messages", &pal);
     ui.add_space(4.0);
 
-    let rows: Vec<(Snowflake, String, String, Option<Status>, bool, u32, String)> = {
+    // (channel, name, avatar url, status, unread, mentions, subtitle)
+    type DmRow = (Snowflake, String, String, Option<Status>, bool, u32, String);
+    let rows: Vec<DmRow> = {
         let s = app.client.store();
         s.sorted_private_channels()
             .into_iter()
@@ -203,7 +226,11 @@ fn dm_list(app: &mut App, ui: &mut Ui) {
             .map(|c| {
                 let rids = c.recipient_ids();
                 let (name, avatar, status, sub) = if c.kind == ChannelType::GroupDm {
-                    let name = c.name.clone().filter(|n| !n.is_empty()).unwrap_or_else(|| rids.iter().map(|u| s.display_name(None, *u)).collect::<Vec<_>>().join(", "));
+                    let name = c
+                        .name
+                        .clone()
+                        .filter(|n| !n.is_empty())
+                        .unwrap_or_else(|| rids.iter().map(|u| s.display_name(None, *u)).collect::<Vec<_>>().join(", "));
                     let avatar = c.icon_url(64).unwrap_or_else(|| ferrocord_core::model::cdn::default_avatar(c.id, "0"));
                     (name, avatar, None, format!("{} Members", rids.len() + 1))
                 } else {
@@ -220,7 +247,13 @@ fn dm_list(app: &mut App, ui: &mut Ui) {
         let selected = app.nav.channel == Some(id);
         let (rect, resp) = widgets::list_row(ui, 44.0, selected, &pal);
         let av = egui::Rect::from_min_size(pos2(rect.min.x + 8.0, rect.center().y - 16.0), vec2(32.0, 32.0));
-        let ring = if selected { pal.bg_selected } else if resp.hovered() { pal.bg_hover } else { pal.bg_side };
+        let ring = if selected {
+            pal.bg_selected
+        } else if resp.hovered() {
+            pal.bg_hover
+        } else {
+            pal.bg_side
+        };
         widgets::paint_avatar(ui, &app.images, &avatar, av, status.map(|s| (s, ring)), &pal);
         let color = if selected || unread { pal.text } else { pal.text_muted };
         let font = if unread { FontId::new(14.5, theme::bold()) } else { FontId::proportional(14.5) };
@@ -294,7 +327,16 @@ fn account_panel(app: &mut App, ui: &mut Ui) {
         egui::Popup::menu(&r).show(|ui| {
             ui.set_min_width(200.0);
             for s in [Status::Online, Status::Idle, Status::Dnd, Status::Invisible] {
-                let label = format!("{}  {}", match s { Status::Online => "🟢", Status::Idle => "🌙", Status::Dnd => "⛔", _ => "⚪" }, s.label());
+                let label = format!(
+                    "{}  {}",
+                    match s {
+                        Status::Online => "🟢",
+                        Status::Idle => "🌙",
+                        Status::Dnd => "⛔",
+                        _ => "⚪",
+                    },
+                    s.label()
+                );
                 if ui.selectable_label(status == s, label).clicked() {
                     app.client.set_status(s);
                     ui.close();

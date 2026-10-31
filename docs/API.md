@@ -46,7 +46,7 @@ stored in `api-token.txt` in Ferrocord's config directory:
 | Linux   | `~/.config/ferrocord/api-token.txt` (or `$XDG_CONFIG_HOME/ferrocord/api-token.txt`) |
 | macOS   | `~/Library/Application Support/dev.ferrocord.Ferrocord/api-token.txt` |
 
-On Unix the file is created with mode `0600`. Regenerating the token (from the
+On Unix the file permissions are restricted to `0600`. Regenerating the token (from the
 settings, or by deleting the file and restarting Ferrocord) immediately invalidates
 the old one for new requests.
 

@@ -20,17 +20,28 @@ use crate::extension::{Extension, Flow, LocalCommand, OutgoingMessage};
 #[derive(Debug, Clone)]
 pub enum ClientEvent {
     /// A gateway dispatch, already applied to the store.
-    Dispatch { name: String, event: Arc<Event>, raw: Arc<Value> },
+    Dispatch {
+        name: String,
+        event: Arc<Event>,
+        raw: Arc<Value>,
+    },
     Connection(ConnectionState),
     Latency(Duration),
     /// The session ended; the UI should return to the login screen.
-    LoggedOut { reason: String },
+    LoggedOut {
+        reason: String,
+    },
     /// A message that warrants a desktop notification.
     Notification(Notification),
     /// A history page finished loading.
-    MessagesLoaded { channel_id: Snowflake },
+    MessagesLoaded {
+        channel_id: Snowflake,
+    },
     /// A user-initiated action failed.
-    ActionFailed { action: String, error: String },
+    ActionFailed {
+        action: String,
+        error: String,
+    },
 }
 
 impl ClientEvent {
@@ -73,6 +84,8 @@ pub struct Notification {
 }
 
 type Repaint = Arc<dyn Fn() + Send + Sync>;
+/// Lazy-guild subscription: the channel whose member list we follow, and its row ranges.
+type Subscription = (Snowflake, Vec<[u32; 2]>);
 
 struct Inner {
     http: Http,
@@ -88,7 +101,7 @@ struct Inner {
     repaint: RwLock<Option<Repaint>>,
     typing_sent: Mutex<HashMap<Snowflake, Instant>>,
     /// Guilds we've sent a lazy subscription for, with the channel + ranges.
-    subscriptions: Mutex<HashMap<Snowflake, (Snowflake, Vec<[u32; 2]>)>>,
+    subscriptions: Mutex<HashMap<Snowflake, Subscription>>,
     /// Channel currently shown in the UI (suppresses notifications for it).
     focused_channel: RwLock<Option<Snowflake>>,
     window_focused: RwLock<bool>,
@@ -188,10 +201,15 @@ impl Client {
         *self.inner.repaint.write() = Some(Arc::new(f));
     }
 
-    fn repaint(&self) {
+    /// Wakes the UI so it re-renders (e.g. after background work updated caches).
+    pub fn request_repaint(&self) {
         if let Some(r) = self.inner.repaint.read().clone() {
             r();
         }
+    }
+
+    fn repaint(&self) {
+        self.request_repaint();
     }
 
     pub fn emit(&self, ev: ClientEvent) {
@@ -295,16 +313,16 @@ impl Client {
         while let Some(msg) = rx.recv().await {
             match msg {
                 GatewayMessage::Dispatch { event, raw, .. } => {
-                    let notification = match &event {
+                    let notification = match &*event {
                         Event::MessageCreate(m) => self.notification_for(m),
                         _ => None,
                     };
-                    if let Event::Ready(r) = &event {
+                    if let Event::Ready(r) = &*event {
                         self.on_ready(r);
                     }
                     self.inner.store.write().apply(&event);
                     let name = event.name().to_string();
-                    self.emit(ClientEvent::Dispatch { name, event: Arc::new(event), raw });
+                    self.emit(ClientEvent::Dispatch { name, event: Arc::from(event), raw });
                     if let Some(n) = notification {
                         self.emit(ClientEvent::Notification(n));
                     }
@@ -399,14 +417,7 @@ impl Client {
         if body.is_empty() {
             body = if !m.attachments.is_empty() { "Sent an attachment".into() } else { "Sent a message".into() };
         }
-        Some(Notification {
-            title,
-            body,
-            channel_id: m.channel_id,
-            guild_id: channel.guild_id,
-            message_id: m.id,
-            icon_url: Some(m.author.avatar_url(64)),
-        })
+        Some(Notification { title, body, channel_id: m.channel_id, guild_id: channel.guild_id, message_id: m.id, icon_url: Some(m.author.avatar_url(64)) })
     }
 
     // ------------------------------------------------------------ messages
@@ -526,13 +537,8 @@ impl Client {
     }
 
     pub fn retry_pending(&self, channel: Snowflake, nonce: &str) {
-        let content = self
-            .inner
-            .store
-            .read()
-            .messages
-            .get(&channel)
-            .and_then(|cm| cm.messages.iter().find(|m| m.id.to_string() == nonce).map(|m| m.content.clone()));
+        let content =
+            self.inner.store.read().messages.get(&channel).and_then(|cm| cm.messages.iter().find(|m| m.id.to_string() == nonce).map(|m| m.content.clone()));
         self.inner.store.write().remove_pending(nonce);
         if let Some(c) = content {
             self.send_message(channel, c, None, false, vec![]);
@@ -642,12 +648,7 @@ impl Client {
     pub fn ack_guild(&self, guild: Snowflake) {
         let entries: Vec<(Snowflake, Snowflake)> = {
             let mut s = self.inner.store.write();
-            let ids: Vec<_> = s
-                .channels
-                .values()
-                .filter(|c| c.guild_id == Some(guild))
-                .filter_map(|c| c.last_message_id.map(|l| (c.id, l)))
-                .collect();
+            let ids: Vec<_> = s.channels.values().filter(|c| c.guild_id == Some(guild)).filter_map(|c| c.last_message_id.map(|l| (c.id, l))).collect();
             for (c, l) in &ids {
                 let rs = s.read_states.entry(*c).or_insert_with(|| ReadState { id: *c, ..Default::default() });
                 rs.last_message_id = Some(*l);
@@ -711,12 +712,7 @@ impl Client {
             return;
         }
         if let Some(gw) = self.gateway() {
-            gw.request_guild_members(&gateway::RequestGuildMembers {
-                guild_id: vec![guild],
-                user_ids: users,
-                presences: false,
-                ..Default::default()
-            });
+            gw.request_guild_members(&gateway::RequestGuildMembers { guild_id: vec![guild], user_ids: users, presences: false, ..Default::default() });
         }
     }
 
@@ -724,10 +720,7 @@ impl Client {
     pub async fn open_dm(&self, user: Snowflake) -> Result<Snowflake, HttpError> {
         let existing = {
             let s = self.inner.store.read();
-            s.sorted_private_channels()
-                .into_iter()
-                .find(|c| c.kind == ChannelType::Dm && c.recipient_ids() == vec![user])
-                .map(|c| c.id)
+            s.sorted_private_channels().into_iter().find(|c| c.kind == ChannelType::Dm && c.recipient_ids() == vec![user]).map(|c| c.id)
         };
         if let Some(id) = existing {
             return Ok(id);
@@ -763,7 +756,13 @@ impl Client {
         let settings = PreloadedUserSettings {
             status: Some(StatusSettings {
                 status: None,
-                custom_status: Some(cs.unwrap_or(CustomStatus { text: String::new(), emoji_id: 0, emoji_name: String::new(), expires_at_ms: 0, created_at_ms: 0 })),
+                custom_status: Some(cs.unwrap_or(CustomStatus {
+                    text: String::new(),
+                    emoji_id: 0,
+                    emoji_name: String::new(),
+                    expires_at_ms: 0,
+                    created_at_ms: 0,
+                })),
                 show_current_game: None,
             }),
             ..Default::default()

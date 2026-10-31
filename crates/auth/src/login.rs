@@ -73,12 +73,19 @@ impl MfaStep {
 
 #[derive(Debug, Clone)]
 pub enum LoginOutcome {
-    Success { token: String, user_id: Option<Snowflake> },
+    Success {
+        token: String,
+        user_id: Option<Snowflake>,
+    },
     Mfa(MfaStep),
     /// Login from a new location must be approved via an email link first.
-    VerificationRequired { message: String },
+    VerificationRequired {
+        message: String,
+    },
     /// The account is suspended; the token only grants access to the appeal flow.
-    Suspended { token: String },
+    Suspended {
+        token: String,
+    },
 }
 
 /// `POST /auth/login`.
@@ -121,10 +128,8 @@ fn parse_login_response(body: &Value) -> LoginOutcome {
 }
 
 fn map_login_error(e: HttpError) -> AuthError {
-    if let Some(raw) = e.raw_body() {
-        if let Some(t) = raw.get("suspended_user_token").and_then(Value::as_str) {
-            return AuthError::Suspended(t.to_string());
-        }
+    if let Some(t) = e.raw_body().and_then(|raw| raw.get("suspended_user_token")).and_then(Value::as_str) {
+        return AuthError::Suspended(t.to_string());
     }
     match &e {
         HttpError::Api { body, .. } => {
@@ -158,19 +163,14 @@ pub async fn verify_mfa(http: &Http, step: &MfaStep, method: MfaMethod, code: &s
     }));
     match http.send(req).await {
         Ok(v) => v.get("token").and_then(Value::as_str).map(str::to_string).ok_or_else(|| AuthError::Rejected("no token in response".into())),
-        Err(HttpError::Api { body, .. }) if body.code == ferrocord_http::error::codes::MFA_INVALID_CODE => {
-            Err(AuthError::InvalidMfaCode(body.message))
-        }
+        Err(HttpError::Api { body, .. }) if body.code == ferrocord_http::error::codes::MFA_INVALID_CODE => Err(AuthError::InvalidMfaCode(body.message)),
         Err(e) => Err(map_login_error(e)),
     }
 }
 
 /// Requests an SMS code for the ticket. Returns the redacted phone number.
 pub async fn send_sms(http: &Http, step: &MfaStep) -> Result<String, AuthError> {
-    let v = http
-        .send(Request::post("/auth/mfa/sms/send").unauthenticated().json(json!({ "ticket": step.ticket })))
-        .await
-        .map_err(map_login_error)?;
+    let v = http.send(Request::post("/auth/mfa/sms/send").unauthenticated().json(json!({ "ticket": step.ticket }))).await.map_err(map_login_error)?;
     Ok(v.get("phone").and_then(Value::as_str).unwrap_or("your phone").to_string())
 }
 

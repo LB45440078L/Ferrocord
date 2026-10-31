@@ -162,11 +162,7 @@ mod tests {
     #[test]
     fn roundtrip_status() {
         let s = PreloadedUserSettings {
-            status: Some(StatusSettings {
-                status: Some(StringValue { value: "dnd".into() }),
-                custom_status: None,
-                show_current_game: None,
-            }),
+            status: Some(StatusSettings { status: Some(StringValue { value: "dnd".into() }), custom_status: None, show_current_game: None }),
             ..Default::default()
         };
         let b = s.to_base64();

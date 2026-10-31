@@ -412,7 +412,11 @@ fn render_blocks(ui: &mut Ui, blocks: &[Block], ctx: &MdCtx<'_>, indent: f32, ju
                 let start = ui.cursor().min;
                 let r = render_blocks(ui, inner, ctx, indent + 14.0, false);
                 let end = ui.cursor().min.y - 2.0;
-                ui.painter().rect_filled(Rect::from_min_max(pos2(start.x + indent, start.y), pos2(start.x + indent + 4.0, end)), CornerRadius::same(2), p.text_faint);
+                ui.painter().rect_filled(
+                    Rect::from_min_max(pos2(start.x + indent, start.y), pos2(start.x + indent + 4.0, end)),
+                    CornerRadius::same(2),
+                    p.text_faint,
+                );
                 r
             }
         };

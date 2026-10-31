@@ -21,14 +21,27 @@ pub struct Style {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Inline {
     Text(String, Style),
-    Link { text: String, url: String, style: Style },
+    Link {
+        text: String,
+        url: String,
+        style: Style,
+    },
     User(Snowflake, Style),
     Role(Snowflake, Style),
     Channel(Snowflake, Style),
     /// `@everyone` / `@here`.
     Everyone(String, Style),
-    Emoji { id: Snowflake, name: String, animated: bool, style: Style },
-    Timestamp { unix: i64, format: char, style: Style },
+    Emoji {
+        id: Snowflake,
+        name: String,
+        animated: bool,
+        style: Style,
+    },
+    Timestamp {
+        unix: i64,
+        format: char,
+        style: Style,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -230,7 +243,8 @@ pub fn parse_inline(src: &str, style: Style, spoilers: &mut usize) -> Vec<Inline
         }
 
         // Paired delimiters.
-        let delims: [(&str, fn(Style) -> Style); 6] = [
+        type Delim = (&'static str, fn(Style) -> Style);
+        let delims: [Delim; 6] = [
             ("||", |s| s),
             ("***", |s| Style { bold: true, italic: true, ..s }),
             ("**", |s| Style { bold: true, ..s }),

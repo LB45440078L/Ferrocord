@@ -48,11 +48,7 @@ impl CaptchaSolver for WebViewCaptcha {
                 if let Some(json) = line.strip_prefix("CAPTCHA_RESULT ") {
                     let v: serde_json::Value = serde_json::from_str(json).ok()?;
                     if let Some(key) = v.get("key").and_then(|k| k.as_str()) {
-                        result = Some(CaptchaSolution {
-                            key: key.to_string(),
-                            rqtoken: challenge.rqtoken.clone(),
-                            session_id: challenge.session_id.clone(),
-                        });
+                        result = Some(CaptchaSolution { key: key.to_string(), rqtoken: challenge.rqtoken.clone(), session_id: challenge.session_id.clone() });
                     }
                     break;
                 }

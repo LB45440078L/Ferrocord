@@ -61,10 +61,7 @@ impl ApiServer {
             tokio::net::TcpListener::from_std(std_listener)?
         };
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
-        let app = router(
-            AppState { client: client.clone(), shutdown: shutdown_rx.clone() },
-            auth::Guard { token: token.clone(), port: addr.port() },
-        );
+        let app = router(AppState { client: client.clone(), shutdown: shutdown_rx.clone() }, auth::Guard { token: token.clone(), port: addr.port() });
         let mut stop = shutdown_rx;
         let task = client.runtime().spawn(async move {
             let shutdown = async move {

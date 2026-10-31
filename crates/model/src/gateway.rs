@@ -382,7 +382,7 @@ pub struct MemberListGroup {
 #[serde(rename_all = "lowercase")]
 pub enum MemberListItem {
     Group(MemberListGroup),
-    Member(MemberListMember),
+    Member(Box<MemberListMember>),
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -502,11 +502,17 @@ pub enum Event {
     UserUpdate(Box<CurrentUser>),
     UserSettingsProtoUpdate(SettingsProtoUpdate),
     UserGuildSettingsUpdate(Box<UserGuildSettings>),
-    UserNoteUpdate { id: Snowflake, note: String },
+    UserNoteUpdate {
+        id: Snowflake,
+        note: String,
+    },
     VoiceStateUpdate(Box<VoiceState>),
     VoiceServerUpdate(Value),
     SessionsReplace(Value),
-    Other { name: String, data: Value },
+    Other {
+        name: String,
+        data: Value,
+    },
 }
 
 impl Event {

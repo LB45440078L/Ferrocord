@@ -89,10 +89,7 @@ impl RateLimiter {
         self.route_to_bucket.lock().insert(key, bucket.to_string());
         let remaining = get("x-ratelimit-remaining").and_then(|v| v.parse().ok()).unwrap_or(1);
         let reset_after: f64 = get("x-ratelimit-reset-after").and_then(|v| v.parse().ok()).unwrap_or(0.0);
-        self.buckets.lock().insert(
-            format!("{bucket}:{major}"),
-            BucketState { remaining, reset_at: Instant::now() + Duration::from_secs_f64(reset_after) },
-        );
+        self.buckets.lock().insert(format!("{bucket}:{major}"), BucketState { remaining, reset_at: Instant::now() + Duration::from_secs_f64(reset_after) });
     }
 
     pub fn set_global(&self, retry_after: f64) {

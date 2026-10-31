@@ -124,7 +124,13 @@ fn guild_button(app: &App, ui: &mut Ui, guild: Option<Snowflake>, name: &str, se
         (None, _) => {
             let fill = if selected || hovered { pal.accent } else { pal.bg_elevated };
             ui.painter().rect_filled(icon_rect, CornerRadius::same(radius), fill);
-            ui.painter().text(icon_rect.center(), egui::Align2::CENTER_CENTER, "💬", FontId::proportional(20.0), if selected || hovered { Color32::WHITE } else { pal.text_muted });
+            ui.painter().text(
+                icon_rect.center(),
+                egui::Align2::CENTER_CENTER,
+                "💬",
+                FontId::proportional(20.0),
+                if selected || hovered { Color32::WHITE } else { pal.text_muted },
+            );
         }
     }
     if mentions > 0 {
@@ -163,7 +169,9 @@ fn folder(app: &mut App, ui: &mut Ui, id: i64, name: Option<String>, color: Opti
             let cell = Rect::from_min_size(icon.min + vec2(5.0 + (i % 2) as f32 * 19.0, 5.0 + (i / 2) as f32 * 19.0), vec2(17.0, 17.0));
             let url = s.guilds.get(g).and_then(|g| g.icon_url(32));
             match url.and_then(|u| app.images.get(&u)) {
-                Some(img) => egui::Image::from_texture(egui::load::SizedTexture::new(img.texture, cell.size())).corner_radius(CornerRadius::same(6)).paint_at(ui, cell),
+                Some(img) => {
+                    egui::Image::from_texture(egui::load::SizedTexture::new(img.texture, cell.size())).corner_radius(CornerRadius::same(6)).paint_at(ui, cell)
+                }
                 None => {
                     ui.painter().rect_filled(cell, CornerRadius::same(6), pal.bg_elevated);
                 }

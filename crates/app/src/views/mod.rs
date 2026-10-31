@@ -2,6 +2,7 @@
 
 pub mod channels;
 pub mod chat;
+pub mod forum;
 pub mod friends;
 pub mod guilds;
 pub mod members;

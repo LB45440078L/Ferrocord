@@ -379,12 +379,7 @@ impl Store {
             self.notes = n.clone();
         }
         self.sessions = r.sessions.clone();
-        tracing::info!(
-            guilds = self.guilds.len(),
-            channels = self.channels.len(),
-            users = self.users.len(),
-            "READY applied"
-        );
+        tracing::info!(guilds = self.guilds.len(), channels = self.channels.len(), users = self.users.len(), "READY applied");
     }
 
     fn apply_supplemental(&mut self, s: &ReadySupplemental) {
@@ -685,11 +680,7 @@ impl Store {
     pub fn member_color(&self, guild: Snowflake, user: Snowflake) -> Option<u32> {
         let g = self.guilds.get(&guild)?;
         let m = self.member(guild, user)?;
-        g.roles
-            .iter()
-            .filter(|r| m.roles.contains(&r.id) && r.color != 0)
-            .max_by_key(|r| r.position)
-            .map(|r| r.color)
+        g.roles.iter().filter(|r| m.roles.contains(&r.id) && r.color != 0).max_by_key(|r| r.position).map(|r| r.color)
     }
 
     pub fn my_roles(&self, guild: Snowflake) -> Vec<Snowflake> {
@@ -766,8 +757,7 @@ impl Store {
         let mut entries = vec![];
         if let Some(f) = &self.settings.guild_folders {
             for folder in &f.folders {
-                let ids: Vec<Snowflake> =
-                    folder.guild_ids.iter().map(|g| Snowflake(*g)).filter(|g| self.guilds.contains_key(g)).collect();
+                let ids: Vec<Snowflake> = folder.guild_ids.iter().map(|g| Snowflake(*g)).filter(|g| self.guilds.contains_key(g)).collect();
                 if ids.is_empty() {
                     continue;
                 }
@@ -798,12 +788,7 @@ impl Store {
         let s = self.guild_settings.get(&c.guild_id);
         let now = chrono::Utc::now();
         let active = |muted: bool, cfg: &Option<MuteConfig>| {
-            muted
-                && cfg
-                    .as_ref()
-                    .and_then(|c| c.end_time.as_ref())
-                    .and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok())
-                    .is_none_or(|end| end > now)
+            muted && cfg.as_ref().and_then(|c| c.end_time.as_ref()).and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok()).is_none_or(|end| end > now)
         };
         let Some(s) = s else { return false };
         let check = |id: Snowflake| s.channel_overrides.iter().any(|o| o.channel_id == id && active(o.muted, &o.mute_config));
@@ -985,11 +970,13 @@ mod tests {
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0].id, Snowflake(999));
 
-        let (upd, _) = Event::parse("MESSAGE_UPDATE", &json!({"id": "999", "channel_id": "200", "content": "edited", "edited_timestamp": "2026-01-01T00:01:00Z"}));
+        let (upd, _) =
+            Event::parse("MESSAGE_UPDATE", &json!({"id": "999", "channel_id": "200", "content": "edited", "edited_timestamp": "2026-01-01T00:01:00Z"}));
         s.apply(&upd);
         assert_eq!(s.message(Snowflake(200), Snowflake(999)).unwrap().content, "edited");
 
-        let (r, _) = Event::parse("MESSAGE_REACTION_ADD", &json!({"user_id": "2", "channel_id": "200", "message_id": "999", "emoji": {"id": null, "name": "👍"}}));
+        let (r, _) =
+            Event::parse("MESSAGE_REACTION_ADD", &json!({"user_id": "2", "channel_id": "200", "message_id": "999", "emoji": {"id": null, "name": "👍"}}));
         s.apply(&r);
         assert_eq!(s.message(Snowflake(200), Snowflake(999)).unwrap().reactions[0].count, 1);
     }

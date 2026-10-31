@@ -72,6 +72,7 @@ pub enum Modal {
     Pins { channel: Snowflake, messages: Option<Vec<ferrocord_core::model::Message>> },
     JoinServer { code: String, status: Option<String> },
     CustomStatus { text: String },
+    Search { query: String, results: Option<(u64, Vec<ferrocord_core::model::Message>)>, searching: bool },
 }
 
 pub struct Toast {
@@ -127,7 +128,7 @@ impl App {
         } else {
             Screen::Login(Box::default())
         };
-        let ext = crate::integrations::Integrations::start(&client);
+        let ext = crate::integrations::Integrations::start(&client, demo);
         let mut app = Self {
             client,
             images,
@@ -267,7 +268,35 @@ impl App {
     }
 
     pub fn select_channel(&mut self, channel: Snowflake) {
-        let guild = self.client.store().channels.get(&channel).and_then(|c| c.guild_id);
+        let (guild, kind) = {
+            let s = self.client.store();
+            let c = s.channels.get(&channel);
+            (c.and_then(|c| c.guild_id), c.map(|c| c.kind).unwrap_or_default())
+        };
+        if kind.is_voice() {
+            self.toast("Voice and video aren't supported yet — text chat in voice channels is coming soon.", false);
+            return;
+        }
+        if matches!(kind, ferrocord_core::model::ChannelType::GuildForum | ferrocord_core::model::ChannelType::GuildMedia) {
+            self.nav.guild = guild;
+            self.nav.channel = Some(channel);
+            self.nav.last_channel.insert(guild, channel);
+            if !self.demo {
+                self.client.spawn_action("load_forum", move |c| async move {
+                    let threads = c.http().forum_threads(channel, 0).await?;
+                    {
+                        let mut s = c.store_mut();
+                        for mut t in threads {
+                            t.guild_id = t.guild_id.or(guild);
+                            s.upsert_channel(t);
+                        }
+                    }
+                    c.request_repaint();
+                    Ok(())
+                });
+            }
+            return;
+        }
         self.nav.guild = guild;
         self.nav.channel = Some(channel);
         self.nav.last_channel.insert(guild, channel);
@@ -299,7 +328,7 @@ impl App {
             match client.open_dm(user).await {
                 Ok(ch) => {
                     let _ = tx.send(ch);
-                    ctx_repaint.emit(ClientEvent::MessagesLoaded { channel_id: ch });
+                    ctx_repaint.request_repaint();
                 }
                 Err(e) => client.emit(ClientEvent::ActionFailed { action: "open_dm".into(), error: e.to_string() }),
             }
@@ -416,13 +445,28 @@ impl App {
             views::channels::sidebar(self, ui);
         });
         if show_members {
-            Panel::right("members").exact_size(244.0).resizable(false).show_separator_line(false).frame(egui::Frame::new().fill(self.pal.bg_side)).show(ui, |ui| {
-                views::members::panel(self, ui);
-            });
+            Panel::right("members").exact_size(244.0).resizable(false).show_separator_line(false).frame(egui::Frame::new().fill(self.pal.bg_side)).show(
+                ui,
+                |ui| {
+                    views::members::panel(self, ui);
+                },
+            );
         }
         egui::CentralPanel::no_frame().show(ui, |ui| {
             ui.painter().rect_filled(ui.max_rect(), CornerRadius::ZERO, self.pal.bg_main);
+            let is_forum = self
+                .nav
+                .channel
+                .and_then(|c| {
+                    self.client
+                        .store()
+                        .channels
+                        .get(&c)
+                        .map(|c| matches!(c.kind, ferrocord_core::model::ChannelType::GuildForum | ferrocord_core::model::ChannelType::GuildMedia))
+                })
+                .unwrap_or(false);
             match self.nav.channel {
+                Some(ch) if is_forum => views::forum::forum(self, ui, ch),
                 Some(ch) => views::chat::chat(self, ui, ch),
                 None if self.nav.guild.is_none() => views::friends::page(self, ui),
                 None => {

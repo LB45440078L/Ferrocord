@@ -28,7 +28,10 @@ pub fn panel(app: &mut App, ui: &mut Ui) {
             match id {
                 "online" => "Online".into(),
                 "offline" => "Offline".into(),
-                _ => g.and_then(|g| id.parse::<u64>().ok().and_then(|rid| g.roles.iter().find(|r| r.id.0 == rid))).map(|r| r.name.clone()).unwrap_or_else(|| id.to_string()),
+                _ => g
+                    .and_then(|g| id.parse::<u64>().ok().and_then(|rid| g.roles.iter().find(|r| r.id.0 == rid)))
+                    .map(|r| r.name.clone())
+                    .unwrap_or_else(|| id.to_string()),
             }
         };
         match s.member_list(guild) {
@@ -93,12 +96,22 @@ pub fn panel(app: &mut App, ui: &mut Ui) {
             match &rows[i] {
                 Row::Header(text) => {
                     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), ROW), egui::Sense::hover());
-                    ui.painter().text(pos2(rect.min.x + 16.0, rect.max.y - 10.0), egui::Align2::LEFT_BOTTOM, text.to_uppercase(), FontId::new(11.5, theme::bold()), pal.text_faint);
+                    ui.painter().text(
+                        pos2(rect.min.x + 16.0, rect.max.y - 10.0),
+                        egui::Align2::LEFT_BOTTOM,
+                        text.to_uppercase(),
+                        FontId::new(11.5, theme::bold()),
+                        pal.text_faint,
+                    );
                 }
                 Row::Placeholder => {
                     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), ROW), egui::Sense::hover());
                     ui.painter().circle_filled(pos2(rect.min.x + 30.0, rect.center().y), 16.0, pal.bg_hover);
-                    ui.painter().rect_filled(egui::Rect::from_min_size(pos2(rect.min.x + 56.0, rect.center().y - 5.0), vec2(100.0, 10.0)), egui::CornerRadius::same(5), pal.bg_hover);
+                    ui.painter().rect_filled(
+                        egui::Rect::from_min_size(pos2(rect.min.x + 56.0, rect.center().y - 5.0), vec2(100.0, 10.0)),
+                        egui::CornerRadius::same(5),
+                        pal.bg_hover,
+                    );
                 }
                 Row::Member { id, name, color, avatar, status, sub, bot } => {
                     let offline = matches!(status, ferrocord_core::model::Status::Offline | ferrocord_core::model::Status::Invisible);

@@ -9,11 +9,11 @@ use ferrocord_core::{Client, Config};
 use parking_lot::{Mutex, RwLock};
 use serde::Serialize;
 
+use crate::PluginError;
 use crate::manifest::{MANIFEST_FILE, Permission, PluginManifest, is_valid_id};
 use crate::proxy::PluginProxy;
 use crate::runtime::{self, Launch, LogBuffer, LogLevel, Notifier, NotifierSlot, PluginLog, push_log};
 use crate::storage::STORAGE_FILE;
-use crate::PluginError;
 
 /// How long unloading waits for a plugin thread to finish its current callback.
 const UNLOAD_WAIT: Duration = Duration::from_secs(1);
@@ -357,11 +357,7 @@ impl PluginHost {
 /// Permissions a plugin actually receives: declared in its manifest *and* granted by the user.
 pub fn effective_permissions(manifest: &PluginManifest, config: &Config) -> BTreeSet<Permission> {
     let granted = config.plugins.grants.get(&manifest.id);
-    manifest
-        .declared_permissions()
-        .into_iter()
-        .filter(|p| granted.is_some_and(|g| g.iter().any(|x| x == p.as_str())))
-        .collect()
+    manifest.declared_permissions().into_iter().filter(|p| granted.is_some_and(|g| g.iter().any(|x| x == p.as_str()))).collect()
 }
 
 fn permission_statuses(m: &PluginManifest, config: &Config) -> Vec<PermissionStatus> {

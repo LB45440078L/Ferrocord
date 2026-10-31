@@ -33,11 +33,7 @@ impl ApiError {
     }
 
     pub fn actions_disabled() -> Self {
-        Self::new(
-            StatusCode::FORBIDDEN,
-            "actions_disabled",
-            "write actions are disabled; enable \"Allow actions\" in Ferrocord's API settings",
-        )
+        Self::new(StatusCode::FORBIDDEN, "actions_disabled", "write actions are disabled; enable \"Allow actions\" in Ferrocord's API settings")
     }
 
     pub fn not_ready() -> Self {

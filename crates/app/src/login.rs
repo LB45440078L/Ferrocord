@@ -213,7 +213,11 @@ impl LoginScreen {
 
         let card_w = 440.0_f32.min(rect.width() - 32.0);
         let card = egui::Rect::from_center_size(rect.center(), vec2(card_w, 10.0));
-        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(egui::Rect::from_min_size(egui::pos2(card.min.x, rect.min.y), vec2(card_w, rect.height()))).layout(Layout::top_down(Align::Center)));
+        let mut child = ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(egui::Rect::from_min_size(egui::pos2(card.min.x, rect.min.y), vec2(card_w, rect.height())))
+                .layout(Layout::top_down(Align::Center)),
+        );
         let ui = &mut child;
         ui.add_space((rect.height() * 0.12).max(24.0));
         egui::Frame::new()
@@ -230,46 +234,48 @@ impl LoginScreen {
                 ui.add_space(16.0);
 
                 ui.with_layout(Layout::top_down(Align::Min), |ui| {
-                if let Step::Mfa { .. } = self.step {
-                    self.mfa_ui(ui, client, &ctx, pal);
-                } else {
-                    ui.horizontal(|ui| {
-                        for (tab, label) in [(Tab::Password, "Password"), (Tab::Qr, "QR Code"), (Tab::Token, "Token")] {
-                            let sel = self.tab == tab;
-                            let b = egui::Button::new(RichText::new(label).color(if sel { Color32::WHITE } else { pal.text_muted }))
-                                .fill(if sel { pal.accent } else { pal.bg_elevated })
-                                .corner_radius(CornerRadius::same(6))
-                                .min_size(vec2((ui.available_width() - 16.0) / 3.0, 32.0));
-                            if ui.add(b).clicked() {
-                                self.tab = tab;
-                                self.error = None;
-                                self.info = None;
+                    if let Step::Mfa { .. } = self.step {
+                        self.mfa_ui(ui, client, &ctx, pal);
+                    } else {
+                        ui.horizontal(|ui| {
+                            for (tab, label) in [(Tab::Password, "Password"), (Tab::Qr, "QR Code"), (Tab::Token, "Token")] {
+                                let sel = self.tab == tab;
+                                let b = egui::Button::new(RichText::new(label).color(if sel { Color32::WHITE } else { pal.text_muted }))
+                                    .fill(if sel { pal.accent } else { pal.bg_elevated })
+                                    .corner_radius(CornerRadius::same(6))
+                                    .min_size(vec2((ui.available_width() - 16.0) / 3.0, 32.0));
+                                if ui.add(b).clicked() {
+                                    self.tab = tab;
+                                    self.error = None;
+                                    self.info = None;
+                                }
                             }
+                        });
+                        ui.add_space(14.0);
+                        match self.tab {
+                            Tab::Password => self.password_ui(ui, client, &ctx, pal),
+                            Tab::Qr => self.qr_ui(ui, images, pal),
+                            Tab::Token => self.token_ui(ui, client, &ctx, pal),
                         }
-                    });
-                    ui.add_space(14.0);
-                    match self.tab {
-                        Tab::Password => self.password_ui(ui, client, &ctx, pal),
-                        Tab::Qr => self.qr_ui(ui, images, pal),
-                        Tab::Token => self.token_ui(ui, client, &ctx, pal),
                     }
-                }
 
-                if let Some(e) = &self.error {
-                    ui.add_space(10.0);
-                    ui.label(RichText::new(e).color(pal.danger));
-                }
-                if let Some(i) = &self.info {
-                    ui.add_space(10.0);
-                    ui.label(RichText::new(i).color(pal.warning));
-                }
+                    if let Some(e) = &self.error {
+                        ui.add_space(10.0);
+                        ui.label(RichText::new(e).color(pal.danger));
+                    }
+                    if let Some(i) = &self.info {
+                        ui.add_space(10.0);
+                        ui.label(RichText::new(i).color(pal.warning));
+                    }
                 });
             });
         ui.add_space(12.0);
         ui.label(
-            RichText::new("Ferrocord is an unofficial client and is not affiliated with Discord Inc.\nUsing third-party clients may violate Discord's Terms of Service.")
-                .small()
-                .color(pal.text_faint),
+            RichText::new(
+                "Ferrocord is an unofficial client and is not affiliated with Discord Inc.\nUsing third-party clients may violate Discord's Terms of Service.",
+            )
+            .small()
+            .color(pal.text_faint),
         );
     }
 
@@ -286,7 +292,10 @@ impl LoginScreen {
         let enter = (r1.lost_focus() || r2.lost_focus()) && ui.input(|i| i.key_pressed(egui::Key::Enter));
         let can = !self.busy && !self.login.trim().is_empty() && !self.password.is_empty();
         let clicked = ui.add_enabled_ui(can, |ui| {
-            ui.add_sized(vec2(ui.available_width(), 38.0), egui::Button::new(RichText::new(if self.busy { "Logging in…" } else { "Log In" }).color(Color32::WHITE).strong()).fill(pal.accent))
+            ui.add_sized(
+                vec2(ui.available_width(), 38.0),
+                egui::Button::new(RichText::new(if self.busy { "Logging in…" } else { "Log In" }).color(Color32::WHITE).strong()).fill(pal.accent),
+            )
         });
         if can && (clicked.inner.clicked() || enter) {
             self.busy = true;
@@ -315,7 +324,9 @@ impl LoginScreen {
             });
         }
         if step.webauthn.is_some() && methods.is_empty() {
-            ui.label(RichText::new("This account only has a security key configured. Security keys aren't supported yet; use QR login instead.").color(pal.warning));
+            ui.label(
+                RichText::new("This account only has a security key configured. Security keys aren't supported yet; use QR login instead.").color(pal.warning),
+            );
             return;
         }
         let hint = match method {
@@ -348,7 +359,9 @@ impl LoginScreen {
         let r = ui.add(TextEdit::singleline(&mut self.code).desired_width(f32::INFINITY).margin(vec2(10.0, 8.0)).hint_text("Code"));
         r.request_focus();
         ui.add_space(10.0);
-        let submit = ui.add_sized(vec2(ui.available_width(), 38.0), egui::Button::new(RichText::new("Verify").color(Color32::WHITE).strong()).fill(pal.accent)).clicked()
+        let submit = ui
+            .add_sized(vec2(ui.available_width(), 38.0), egui::Button::new(RichText::new("Verify").color(Color32::WHITE).strong()).fill(pal.accent))
+            .clicked()
             || (r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)));
         if submit && !self.busy && !self.code.trim().is_empty() {
             self.busy = true;
@@ -406,16 +419,16 @@ impl LoginScreen {
         let r = Self::field(ui, "Token", &mut self.token, true, pal);
         ui.label(RichText::new("Never share your token. Anyone with it has full access to your account.").small().color(pal.warning));
         ui.add_space(10.0);
-        let go = ui.add_sized(vec2(ui.available_width(), 38.0), egui::Button::new(RichText::new("Log In").color(Color32::WHITE).strong()).fill(pal.accent)).clicked()
+        let go = ui
+            .add_sized(vec2(ui.available_width(), 38.0), egui::Button::new(RichText::new("Log In").color(Color32::WHITE).strong()).fill(pal.accent))
+            .clicked()
             || (r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)));
         if go && !self.busy && !self.token.trim().is_empty() {
             self.busy = true;
             self.error = None;
             let http = client.http().clone();
             let t = self.token.trim().trim_matches('"').to_string();
-            self.spawn(client, ctx, async move {
-                Msg::Token(login::validate_token(&http, &t).await.map(|_| t).map_err(|e| e.to_string()))
-            });
+            self.spawn(client, ctx, async move { Msg::Token(login::validate_token(&http, &t).await.map(|_| t).map_err(|e| e.to_string())) });
         }
     }
 }

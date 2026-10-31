@@ -82,7 +82,10 @@ pub trait MfaHandler: Send + Sync {
 pub enum Body {
     Json(Value),
     /// `payload_json` plus `files[n]` parts (re-buildable for retries).
-    Multipart { payload: Value, files: Vec<FilePart> },
+    Multipart {
+        payload: Value,
+        files: Vec<FilePart>,
+    },
 }
 
 #[derive(Clone)]

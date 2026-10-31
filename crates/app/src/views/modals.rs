@@ -8,7 +8,11 @@ use crate::theme;
 use crate::widgets;
 
 fn frame(app: &App) -> egui::Frame {
-    egui::Frame::new().fill(app.pal.bg_side).corner_radius(CornerRadius::same(12)).inner_margin(egui::Margin::same(20)).stroke(egui::Stroke::new(1.0, app.pal.border))
+    egui::Frame::new()
+        .fill(app.pal.bg_side)
+        .corner_radius(CornerRadius::same(12))
+        .inner_margin(egui::Margin::same(20))
+        .stroke(egui::Stroke::new(1.0, app.pal.border))
 }
 
 pub fn show(app: &mut App, ctx: &egui::Context) {
@@ -29,6 +33,16 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     while let Ok(status) = app.ext.join_rx.try_recv() {
         if let Some(Modal::JoinServer { status: s, .. }) = &mut app.modal {
             *s = Some(status);
+        }
+    }
+
+    while let Ok(res) = app.ext.search_rx.try_recv() {
+        if let Some(Modal::Search { results, searching, .. }) = &mut app.modal {
+            *searching = false;
+            match res {
+                Ok(r) => *results = Some(r),
+                Err(e) => app.toasts.push(crate::app::Toast { text: e, error: true, at: std::time::Instant::now() }),
+            }
         }
     }
 
@@ -72,28 +86,31 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
             Modal::ConfirmDelete { channel, message }
         }
         Modal::ImageViewer { url, open_url } => {
-            let r = egui::Modal::new(egui::Id::unique("image_viewer")).frame(egui::Frame::NONE).backdrop_color(egui::Color32::from_black_alpha(200)).show(ctx, |ui| {
-                let screen = ctx.content_rect().size() * 0.85;
-                match app.images.get(&url) {
-                    Some(img) => {
-                        let resp = ui.add(egui::Image::from_texture(img.sized(screen)).sense(egui::Sense::click()));
-                        if resp.clicked() {
-                            keep = false;
+            let r = egui::Modal::new(egui::Id::unique("image_viewer")).frame(egui::Frame::NONE).backdrop_color(egui::Color32::from_black_alpha(200)).show(
+                ctx,
+                |ui| {
+                    let screen = ctx.content_rect().size() * 0.85;
+                    match app.images.get(&url) {
+                        Some(img) => {
+                            let resp = ui.add(egui::Image::from_texture(img.sized(screen)).sense(egui::Sense::click()));
+                            if resp.clicked() {
+                                keep = false;
+                            }
+                        }
+                        None => {
+                            ui.add_sized(Vec2::splat(120.0), egui::Spinner::new());
                         }
                     }
-                    None => {
-                        ui.add_sized(Vec2::splat(120.0), egui::Spinner::new());
-                    }
-                }
-                ui.horizontal(|ui| {
-                    if ui.link(RichText::new("Open original").color(egui::Color32::WHITE)).clicked() {
-                        crate::views::open_link(app, &open_url);
-                    }
-                    if ui.link(RichText::new("Copy link").color(egui::Color32::WHITE)).clicked() {
-                        ctx.copy_text(open_url.clone());
-                    }
-                });
-            });
+                    ui.horizontal(|ui| {
+                        if ui.link(RichText::new("Open original").color(egui::Color32::WHITE)).clicked() {
+                            crate::views::open_link(app, &open_url);
+                        }
+                        if ui.link(RichText::new("Copy link").color(egui::Color32::WHITE)).clicked() {
+                            ctx.copy_text(open_url.clone());
+                        }
+                    });
+                },
+            );
             if r.should_close() {
                 keep = false;
             }
@@ -115,20 +132,27 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                     Some(list) => {
                         egui::ScrollArea::vertical().max_height(480.0).show(ui, |ui| {
                             for m in list {
-                                egui::Frame::new().fill(app.pal.bg_elevated).corner_radius(CornerRadius::same(8)).inner_margin(egui::Margin::same(10)).show(ui, |ui| {
-                                    ui.set_width(ui.available_width());
-                                    ui.horizontal(|ui| {
-                                        widgets::avatar(ui, &app.images, &m.author.avatar_url(48), 28.0, None, &app.pal);
-                                        ui.label(RichText::new(m.author.display_name()).strong());
-                                        ui.label(RichText::new(m.created_at().with_timezone(&chrono::Local).format("%d/%m/%Y").to_string()).small().color(app.pal.text_faint));
-                                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                            if ui.small_button("Jump").clicked() {
-                                                jump = Some(m.id);
-                                            }
+                                egui::Frame::new().fill(app.pal.bg_elevated).corner_radius(CornerRadius::same(8)).inner_margin(egui::Margin::same(10)).show(
+                                    ui,
+                                    |ui| {
+                                        ui.set_width(ui.available_width());
+                                        ui.horizontal(|ui| {
+                                            widgets::avatar(ui, &app.images, &m.author.avatar_url(48), 28.0, None, &app.pal);
+                                            ui.label(RichText::new(m.author.display_name()).strong());
+                                            ui.label(
+                                                RichText::new(m.created_at().with_timezone(&chrono::Local).format("%d/%m/%Y").to_string())
+                                                    .small()
+                                                    .color(app.pal.text_faint),
+                                            );
+                                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                                if ui.small_button("Jump").clicked() {
+                                                    jump = Some(m.id);
+                                                }
+                                            });
                                         });
-                                    });
-                                    ui.label(&m.content);
-                                });
+                                        ui.label(&m.content);
+                                    },
+                                );
                                 ui.add_space(6.0);
                             }
                         });
@@ -171,7 +195,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                                 Err(e) => format!("Couldn't join: {}", ferrocord_core::error_text(&e)),
                             };
                             let _ = tx.send(msg);
-                            client.emit(ferrocord_core::ClientEvent::MessagesLoaded { channel_id: Snowflake(0) });
+                            client.request_repaint();
                         });
                     }
                 });
@@ -180,6 +204,90 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                 keep = false;
             }
             Modal::JoinServer { code, status }
+        }
+        Modal::Search { mut query, results, mut searching } => {
+            let mut jump: Option<(Snowflake, Snowflake)> = None;
+            let r = egui::Modal::new(egui::Id::unique("search")).frame(frame(app)).show(ctx, |ui| {
+                ui.set_width(600.0);
+                let scope_label = if app.nav.guild.is_some() { "Search this server" } else { "Search this conversation" };
+                ui.label(RichText::new(scope_label).font(FontId::new(17.0, theme::bold())));
+                ui.add_space(6.0);
+                let te = ui.add(egui::TextEdit::singleline(&mut query).hint_text("Search messages").desired_width(f32::INFINITY).margin(vec2(10.0, 8.0)));
+                te.request_focus();
+                if te.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && !query.trim().is_empty() && !app.demo {
+                    searching = true;
+                    let scope = match (app.nav.guild, app.nav.channel) {
+                        (Some(g), _) => ferrocord_core::http::SearchScope::Guild(g),
+                        (None, Some(c)) => ferrocord_core::http::SearchScope::Channel(c),
+                        _ => ferrocord_core::http::SearchScope::Channel(Snowflake(0)),
+                    };
+                    let q = ferrocord_core::http::SearchQuery { content: Some(query.trim().to_string()), ..Default::default() };
+                    let (client, tx) = (app.client.clone(), app.ext.search_tx.clone());
+                    app.client.runtime().spawn(async move {
+                        let r = client.http().search(scope, &q).await;
+                        let _ = tx.send(
+                            r.map(|r| {
+                                (r.total_results, r.messages.into_iter().filter_map(|mut v| if v.is_empty() { None } else { Some(v.remove(0)) }).collect())
+                            })
+                            .map_err(|e| ferrocord_core::error_text(&e)),
+                        );
+                        client.request_repaint();
+                    });
+                }
+                if searching {
+                    ui.spinner();
+                }
+                if let Some((total, msgs)) = &results {
+                    ui.label(RichText::new(format!("{total} results")).small().color(app.pal.text_faint));
+                    egui::ScrollArea::vertical().max_height(460.0).show(ui, |ui| {
+                        for m in msgs {
+                            let resp = egui::Frame::new()
+                                .fill(app.pal.bg_elevated)
+                                .corner_radius(CornerRadius::same(8))
+                                .inner_margin(egui::Margin::same(10))
+                                .show(ui, |ui| {
+                                    ui.set_width(ui.available_width());
+                                    ui.horizontal(|ui| {
+                                        widgets::avatar(ui, &app.images, &m.author.avatar_url(48), 24.0, None, &app.pal);
+                                        ui.label(RichText::new(m.author.display_name()).strong());
+                                        let ch = app
+                                            .client
+                                            .store()
+                                            .channels
+                                            .get(&m.channel_id)
+                                            .and_then(|c| c.name.clone())
+                                            .map(|n| format!("#{n}"))
+                                            .unwrap_or_default();
+                                        ui.label(RichText::new(ch).small().color(app.pal.text_faint));
+                                        ui.label(
+                                            RichText::new(m.created_at().with_timezone(&chrono::Local).format("%d/%m/%Y %H:%M").to_string())
+                                                .small()
+                                                .color(app.pal.text_faint),
+                                        );
+                                    });
+                                    ui.label(m.content.chars().take(400).collect::<String>());
+                                });
+                            if resp.response.interact(egui::Sense::click()).clicked() {
+                                jump = Some((m.channel_id, m.id));
+                            }
+                            ui.add_space(4.0);
+                        }
+                    });
+                }
+            });
+            if r.should_close() {
+                keep = false;
+            }
+            if let Some((ch, id)) = jump {
+                keep = false;
+                if app.client.store().channels.contains_key(&ch) {
+                    app.select_channel(ch);
+                    if app.client.store().message(ch, id).is_none() {
+                        app.client.load_around(ch, id);
+                    }
+                }
+            }
+            Modal::Search { query, results, searching }
         }
         Modal::CustomStatus { mut text } => {
             let r = egui::Modal::new(egui::Id::unique("custom_status")).frame(frame(app)).show(ctx, |ui| {
@@ -221,7 +329,8 @@ fn quick_switcher(app: &mut App, ctx: &egui::Context, query: &mut String, index:
                 continue;
             }
             let (label, sub) = if c.kind.is_private() {
-                let name = if c.kind == ChannelType::Dm { c.recipient_ids().first().map(|u| s.display_name(None, *u)).unwrap_or_default() } else { c.display_name() };
+                let name =
+                    if c.kind == ChannelType::Dm { c.recipient_ids().first().map(|u| s.display_name(None, *u)).unwrap_or_default() } else { c.display_name() };
                 (format!("@{name}"), "Direct Message".to_string())
             } else {
                 if !s.can_view(c.id) {
@@ -247,7 +356,13 @@ fn quick_switcher(app: &mut App, ctx: &egui::Context, query: &mut String, index:
         v.sort_by_key(|x| std::cmp::Reverse(x.0));
         v.into_iter().take(12).map(|(_, a, b, c)| (a, b, c)).collect()
     };
-    let (up, down, enter) = ctx.input_mut(|i| (i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp), i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown), i.consume_key(egui::Modifiers::NONE, egui::Key::Enter)));
+    let (up, down, enter) = ctx.input_mut(|i| {
+        (
+            i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp),
+            i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown),
+            i.consume_key(egui::Modifiers::NONE, egui::Key::Enter),
+        )
+    });
     if !results.is_empty() {
         if up {
             *index = (*index + results.len() - 1) % results.len();
@@ -262,7 +377,13 @@ fn quick_switcher(app: &mut App, ctx: &egui::Context, query: &mut String, index:
         ui.set_width(540.0);
         ui.label(RichText::new("Where would you like to go?").font(FontId::new(17.0, theme::bold())));
         ui.add_space(6.0);
-        let te = ui.add(egui::TextEdit::singleline(query).hint_text("Search channels and DMs").desired_width(f32::INFINITY).margin(vec2(10.0, 10.0)).font(FontId::proportional(16.0)));
+        let te = ui.add(
+            egui::TextEdit::singleline(query)
+                .hint_text("Search channels and DMs")
+                .desired_width(f32::INFINITY)
+                .margin(vec2(10.0, 10.0))
+                .font(FontId::proportional(16.0)),
+        );
         te.request_focus();
         if te.changed() {
             *index = 0;

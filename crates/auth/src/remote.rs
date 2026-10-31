@@ -97,10 +97,7 @@ fn decrypt(key: &RsaPrivateKey, b64: &str) -> Result<Vec<u8>, String> {
 /// Runs one remote-auth websocket session. `Ok(true)` = token delivered,
 /// `Ok(false)` = session ended normally (timeout/cancel) and should restart.
 async fn session(http: &Http, tx: &mpsc::Sender<RemoteAuthEvent>) -> Result<bool, String> {
-    let key = tokio::task::spawn_blocking(|| RsaPrivateKey::new(&mut rand::thread_rng(), 2048))
-        .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e| e.to_string())?;
+    let key = tokio::task::spawn_blocking(|| RsaPrivateKey::new(&mut rand::thread_rng(), 2048)).await.map_err(|e| e.to_string())?.map_err(|e| e.to_string())?;
     let spki = RsaPublicKey::from(&key).to_public_key_der().map_err(|e| e.to_string())?;
     let encoded_public_key = STANDARD.encode(spki.as_bytes());
     let fingerprint = URL_SAFE_NO_PAD.encode(Sha256::digest(spki.as_bytes()));
@@ -119,9 +116,7 @@ async fn session(http: &Http, tx: &mpsc::Sender<RemoteAuthEvent>) -> Result<bool
         .map_err(|_| "timed out connecting to remote auth gateway".to_string())?
         .map_err(|e| e.to_string())?;
     let (mut sink, mut stream) = ws.split();
-    sink.send(WsMessage::Text(json!({ "op": "init", "encoded_public_key": encoded_public_key }).to_string().into()))
-        .await
-        .map_err(|e| e.to_string())?;
+    sink.send(WsMessage::Text(json!({ "op": "init", "encoded_public_key": encoded_public_key }).to_string().into())).await.map_err(|e| e.to_string())?;
 
     let mut heartbeat: Option<tokio::time::Interval> = None;
     let mut acked = true;

@@ -46,11 +46,7 @@ impl User {
 
     /// `username` or `username#1234` for legacy accounts.
     pub fn tag(&self) -> String {
-        if self.discriminator.is_empty() || self.discriminator == "0" {
-            self.username.clone()
-        } else {
-            format!("{}#{}", self.username, self.discriminator)
-        }
+        if self.discriminator.is_empty() || self.discriminator == "0" { self.username.clone() } else { format!("{}#{}", self.username, self.discriminator) }
     }
 
     pub fn avatar_url(&self, size: u32) -> String {
