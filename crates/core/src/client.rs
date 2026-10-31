@@ -42,6 +42,16 @@ pub enum ClientEvent {
         action: String,
         error: String,
     },
+    /// Our voice connection changed state (joined, left, reconnecting, …).
+    Voice(crate::voice::VoiceStatus),
+    /// Someone is calling us in a DM or group DM.
+    IncomingCall {
+        channel_id: Snowflake,
+    },
+    /// Ringing for a call stopped (answered elsewhere, declined or ended).
+    CallEnded {
+        channel_id: Snowflake,
+    },
 }
 
 impl ClientEvent {
@@ -55,6 +65,9 @@ impl ClientEvent {
             ClientEvent::Notification(_) => "NOTIFICATION",
             ClientEvent::MessagesLoaded { .. } => "MESSAGES_LOADED",
             ClientEvent::ActionFailed { .. } => "ACTION_FAILED",
+            ClientEvent::Voice(_) => "VOICE_STATUS",
+            ClientEvent::IncomingCall { .. } => "INCOMING_CALL",
+            ClientEvent::CallEnded { .. } => "CALL_ENDED",
         }
     }
 
@@ -69,6 +82,10 @@ impl ClientEvent {
             ClientEvent::Notification(n) => json!({ "type": self.name(), "data": n }),
             ClientEvent::MessagesLoaded { channel_id } => json!({ "type": self.name(), "data": { "channel_id": channel_id } }),
             ClientEvent::ActionFailed { action, error } => json!({ "type": self.name(), "data": { "action": action, "error": error } }),
+            ClientEvent::Voice(s) => json!({ "type": self.name(), "data": s }),
+            ClientEvent::IncomingCall { channel_id } | ClientEvent::CallEnded { channel_id } => {
+                json!({ "type": self.name(), "data": { "channel_id": channel_id } })
+            }
         }
     }
 }
@@ -143,6 +160,7 @@ struct Inner {
     window_focused: RwLock<bool>,
     gateway_url: String,
     persist_credentials: bool,
+    voice: crate::voice::VoiceManager,
 }
 
 /// The Ferrocord client. Cheap to clone; all clones share state.
@@ -182,6 +200,7 @@ impl Client {
                 window_focused: RwLock::new(true),
                 gateway_url: options.gateway_url.clone(),
                 persist_credentials: options.persist_credentials,
+                voice: crate::voice::VoiceManager::default(),
             }),
         };
         client.add_extension(Arc::new(crate::extension::BuiltinCommands));
@@ -237,6 +256,10 @@ impl Client {
 
     pub fn latency(&self) -> Option<Duration> {
         *self.inner.latency.read()
+    }
+
+    pub(crate) fn voice_manager(&self) -> &crate::voice::VoiceManager {
+        &self.inner.voice
     }
 
     pub fn gateway(&self) -> Option<GatewayHandle> {
@@ -335,6 +358,7 @@ impl Client {
     }
 
     fn stop_gateway(&self) {
+        self.voice_disconnect_local();
         if let Some(g) = self.inner.gateway.lock().take() {
             g.shutdown();
         }
@@ -374,6 +398,7 @@ impl Client {
                         self.on_ready(r);
                     }
                     self.inner.store.write().apply(&event);
+                    self.voice_on_event(&event, &raw);
                     let name = event.name().to_string();
                     self.emit(ClientEvent::Dispatch { name, event: Arc::from(event), raw });
                     if let Some(n) = notification {
@@ -393,6 +418,9 @@ impl Client {
                 }
                 GatewayMessage::Fatal(e) => {
                     tracing::error!(error = %e, "gateway fatal error");
+                    // The gateway task exits right after this; record the final state ourselves.
+                    *self.inner.connection.write() = ConnectionState::Disconnected;
+                    self.emit(ClientEvent::Connection(ConnectionState::Disconnected));
                     let auth = matches!(e, ferrocord_gateway::GatewayError::AuthenticationFailed);
                     if auth {
                         self.end_session("Your session expired or the token was revoked. Please log in again.");

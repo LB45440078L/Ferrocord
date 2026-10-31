@@ -160,6 +160,8 @@ struct Session {
     id: Option<String>,
     seq: Option<u64>,
     resume_url: Option<String>,
+    /// The last connection attempt reached READY/RESUMED.
+    established: bool,
 }
 
 enum Outcome {
@@ -180,8 +182,11 @@ async fn run(mut config: GatewayConfig, mut cmd_rx: mpsc::UnboundedReceiver<Comm
         let _ = out.send(GatewayMessage::State(ConnectionState::Connecting));
         let base = if resuming { session.resume_url.clone().unwrap_or(config.url.clone()) } else { config.url.clone() };
         let started = Instant::now();
+        session.established = false;
         let outcome = connect_once(&base, &mut config, &mut session, &mut cmd_rx, &out).await;
-        if started.elapsed() > Duration::from_secs(60) {
+        // A working session (or a long-lived connection) proves the network is fine:
+        // the next reconnect should be immediate, not backed off.
+        if session.established || started.elapsed() > Duration::from_secs(60) {
             failures = 0;
         }
         match outcome {
@@ -408,10 +413,12 @@ async fn connect_once(
                                     config.token = t.clone();
                                 }
                                 ready = true;
+                                session.established = true;
                                 let _ = out.send(GatewayMessage::State(ConnectionState::Connected));
                             }
                             Event::Resumed => {
                                 ready = true;
+                                session.established = true;
                                 let _ = out.send(GatewayMessage::State(ConnectionState::Connected));
                             }
                             _ => {}
