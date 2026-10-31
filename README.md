@@ -1,5 +1,14 @@
 # Ferrocord
 
+[![CI](https://github.com/LB45440078L/Ferrocord/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/LB45440078L/Ferrocord/actions/workflows/ci.yml)
+[![Release](https://github.com/LB45440078L/Ferrocord/actions/workflows/release.yml/badge.svg)](https://github.com/LB45440078L/Ferrocord/actions/workflows/release.yml)
+[![Latest release](https://img.shields.io/github/v/release/LB45440078L/Ferrocord?sort=semver&logo=github&label=release)](https://github.com/LB45440078L/Ferrocord/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/LB45440078L/Ferrocord/total?logo=github)](https://github.com/LB45440078L/Ferrocord/releases)
+[![License: BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-blue)](LICENSE)
+[![Rust 1.95+](https://img.shields.io/badge/rust-1.95%2B-orange?logo=rust)](https://www.rust-lang.org)
+[![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-informational)](#installing)
+[![egui](https://img.shields.io/badge/UI-egui-8A2BE2)](https://github.com/emilk/egui)
+
 **A fast, lightweight, open-source Discord client written in Rust.**
 
 Ferrocord talks to Discord's servers using the same protocol as the official
@@ -52,15 +61,15 @@ plugin system and a local API for your own tools.
 ## Installing
 
 Download the file for your system from the
-[latest release](https://github.com/ferrocord/ferrocord/releases/latest):
+[latest release](https://github.com/LB45440078L/Ferrocord/releases/latest):
 
 | System | Download |
 |---|---|
-| Windows 10/11 (x64 or ARM64) | `…-windows-<arch>.msi` (installs for you, or for all users via *Advanced*) or the portable `.zip`; or `winget install Ferrocord.Ferrocord` |
+| Windows 10/11 (x64 or ARM64) | `…-windows-<arch>.msi` (installs for you, or for all users via *Advanced*) or the portable `.zip` |
 | Debian, Ubuntu (amd64 or arm64) | `ferrocord_<version>-1_<arch>.deb`: `sudo apt install ./ferrocord_*.deb` |
 | Fedora, openSUSE (x86_64 or aarch64) | `ferrocord-<version>-1.<arch>.rpm`: `sudo dnf install ./ferrocord-*.rpm` |
 | Any Linux | `.AppImage` (`chmod +x` and run) or the `.tar.gz` |
-| macOS 12+ | `…-macos-arm64.dmg` (Apple Silicon) or `…-macos-x86_64.dmg` (Intel); or `brew install --cask ferrocord/tap/ferrocord` |
+| macOS 12+ | `…-macos-arm64.dmg` (Apple Silicon) or `…-macos-x86_64.dmg` (Intel) |
 
 Until release builds are code-signed, Windows SmartScreen may ask you to confirm,
 and on macOS you approve the first launch in *System Settings > Privacy &
@@ -71,14 +80,10 @@ To build the packages yourself, run `scripts\build-windows.cmd` on Windows,
 `scripts/build-linux.sh` on Debian/Ubuntu or `scripts/build-macos.sh` on a Mac
 (see [docs/RELEASING.md](docs/RELEASING.md#building-packages-locally)).
 
-To build the packages yourself, run `scriptsuild-windows.cmd` on Windows,
-`scripts/build-linux.sh` on Debian/Ubuntu or `scripts/build-macos.sh` on a Mac
-(see [docs/RELEASING.md](docs/RELEASING.md#building-packages-locally)).
-
 ## Quick start
 
 ```sh
-git clone https://github.com/ferrocord/ferrocord
+git clone https://github.com/LB45440078L/Ferrocord
 cd ferrocord
 cargo run --release            # log in with your account
 cargo run --release -- --demo  # explore the UI offline with sample data

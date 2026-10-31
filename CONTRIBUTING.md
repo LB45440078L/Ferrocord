@@ -5,7 +5,7 @@ Thanks for helping! This document covers how to build, test and submit changes.
 ## Getting started
 
 ```sh
-git clone https://github.com/ferrocord/ferrocord
+git clone https://github.com/LB45440078L/Ferrocord
 cd ferrocord
 cargo run -- --demo      # UI with offline sample data, no account needed
 cargo test --workspace

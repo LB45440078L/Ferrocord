@@ -85,7 +85,7 @@ malicious plugin cannot freeze or crash Ferrocord.
 id = "keyword-alerts"            # required
 name = "Keyword Alerts"          # defaults to the id
 version = "1.0.0"                # defaults to "0.0.0"
-author = "Ferrocord contributors" # optional
+author = "AmberCode" # optional
 description = "Notifies you when a message contains one of your keywords." # optional
 entry = "main.lua"               # defaults to "main.lua"
 permissions = ["events.messages", "notify", "storage", "commands", "state.read"]

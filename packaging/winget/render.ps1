@@ -90,7 +90,7 @@ Write-Manifest (Join-Path $dir "$id.locale.en-US.yaml") 'defaultLocale' @"
 PackageIdentifier: $id
 PackageVersion: $Version
 PackageLocale: en-US
-Publisher: Ferrocord Contributors
+Publisher: AmberCode
 PublisherUrl: https://github.com/$Repository
 PublisherSupportUrl: https://github.com/$Repository/issues
 PackageName: Ferrocord

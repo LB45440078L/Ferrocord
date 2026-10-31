@@ -58,8 +58,8 @@ winresource = { version = "0.1.34", default-features = false }
 
 [package.metadata.deb]
 name = "ferrocord"
-maintainer = "Ferrocord maintainers <maintainers@ferrocord.dev>"
-copyright = "Ferrocord contributors"
+maintainer = "AmberCode <ambercode@tutamail.com>"
+copyright = "2026 AmberCode"
 license-file = ["../../LICENSE", "0"]
 extended-description = """\
 Ferrocord is a fast, lightweight, unofficial Discord client written in Rust. \
@@ -92,7 +92,7 @@ assets = [
 name = "ferrocord"
 summary = "Fast, open-source Discord client written in Rust"
 license = "BSD-3-Clause"
-url = "https://github.com/ferrocord/ferrocord"
+url = "https://github.com/LB45440078L/Ferrocord"
 release = "1"
 assets = [
     { source = "target/release/ferrocord", dest = "/usr/bin/ferrocord", mode = "755" },

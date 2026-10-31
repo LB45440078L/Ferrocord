@@ -19,9 +19,9 @@ members = [
 version = "0.1.0"
 edition = "2024"
 license = "BSD-3-Clause"
-repository = "https://github.com/ferrocord/ferrocord"
+repository = "https://github.com/LB45440078L/Ferrocord"
 rust-version = "1.95"
-authors = ["Ferrocord contributors"]
+authors = ["AmberCode <ambercode@tutamail.com>"]
 
 [workspace.dependencies]
 ferrocord-model = { path = "crates/model" }

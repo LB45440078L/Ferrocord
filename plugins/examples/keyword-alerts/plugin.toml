@@ -1,7 +1,7 @@
 id = "keyword-alerts"
 name = "Keyword Alerts"
 version = "1.0.0"
-author = "Ferrocord contributors"
+author = "AmberCode"
 description = "Shows a notification whenever a message contains one of your keywords."
 entry = "main.lua"
 permissions = ["events.messages", "notify", "storage", "commands", "state.read"]

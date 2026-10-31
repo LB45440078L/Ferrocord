@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Copyright Ferrocord contributors -->
+<!-- Copyright AmberCode -->
 <component type="desktop-application">
   <id>dev.ferrocord.Ferrocord</id>
   <metadata_license>CC0-1.0</metadata_license>
@@ -8,7 +8,7 @@
   <name>Ferrocord</name>
   <summary>Fast, lightweight Discord client</summary>
   <developer id="dev.ferrocord">
-    <name>Ferrocord contributors</name>
+    <name>AmberCode</name>
   </developer>
 
   <description>
@@ -34,10 +34,10 @@
     <binary>ferrocord</binary>
   </provides>
 
-  <url type="homepage">https://github.com/ferrocord/ferrocord</url>
-  <url type="bugtracker">https://github.com/ferrocord/ferrocord/issues</url>
-  <url type="vcs-browser">https://github.com/ferrocord/ferrocord</url>
-  <url type="contribute">https://github.com/ferrocord/ferrocord/blob/main/CONTRIBUTING.md</url>
+  <url type="homepage">https://github.com/LB45440078L/Ferrocord</url>
+  <url type="bugtracker">https://github.com/LB45440078L/Ferrocord/issues</url>
+  <url type="vcs-browser">https://github.com/LB45440078L/Ferrocord</url>
+  <url type="contribute">https://github.com/LB45440078L/Ferrocord/blob/main/CONTRIBUTING.md</url>
 
   <screenshots>
     <screenshot type="default">

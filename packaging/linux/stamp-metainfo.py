@@ -27,7 +27,7 @@ if f'version="{version}"' in text:
 kind = "development" if "-" in version else "stable"
 entry = (
     f'    <release version="{version}" date="{date}" type="{kind}">\n'
-    f"      <url>https://github.com/ferrocord/ferrocord/releases/tag/v{version}</url>\n"
+    f"      <url>https://github.com/LB45440078L/Ferrocord/releases/tag/v{version}</url>\n"
     "    </release>\n"
 )
 new, n = re.subn(r"(<releases>\n)", lambda m: m.group(1) + entry, text, count=1)

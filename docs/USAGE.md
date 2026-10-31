@@ -4,7 +4,7 @@
 
 ### Prebuilt packages
 
-Each [release](https://github.com/ferrocord/ferrocord/releases) has packages
+Each [release](https://github.com/LB45440078L/Ferrocord/releases) has packages
 for Windows, Linux and macOS (`X` is the version):
 
 | File | How to install |
@@ -18,11 +18,11 @@ for Windows, Linux and macOS (`X` is the version):
 | `ferrocord-X-macos-arm64.dmg` | Apple Silicon Macs (M1 and later), macOS 12+. Open it and drag *Ferrocord* onto *Applications*. |
 | `ferrocord-X-macos-x86_64.dmg` | Intel Macs, macOS 12+. Same as above. |
 
-With a package manager:
+With a package manager, once the release has been accepted there (not yet for 0.1.0):
 
 ```sh
 winget install Ferrocord.Ferrocord                  # Windows (add --scope machine for all users)
-brew install --cask ferrocord/tap/ferrocord         # macOS
+brew install --cask lb45440078l/tap/ferrocord       # macOS
 ```
 
 Unattended Windows installs use the standard `msiexec` switches:
@@ -51,7 +51,7 @@ Notes:
 ### From source
 
 ```sh
-git clone https://github.com/ferrocord/ferrocord
+git clone https://github.com/LB45440078L/Ferrocord
 cd ferrocord
 cargo build --release
 # the binary is target/release/ferrocord(.exe)

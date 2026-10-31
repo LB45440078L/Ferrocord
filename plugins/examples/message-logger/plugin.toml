@@ -1,7 +1,7 @@
 id = "message-logger"
 name = "Message Logger"
 version = "1.0.0"
-author = "Ferrocord contributors"
+author = "AmberCode"
 description = "Remembers the content of recently deleted messages. Use /deleted to show them."
 entry = "main.lua"
 permissions = ["events.messages", "storage", "commands"]

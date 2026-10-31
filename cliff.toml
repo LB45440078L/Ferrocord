@@ -22,7 +22,7 @@ Entries are generated from [Conventional Commits](https://www.conventionalcommit
 by [git-cliff](https://git-cliff.org) when a release PR is opened; edit them in that PR.
 """
 body = """
-{%- macro remote_url() -%}https://github.com/ferrocord/ferrocord{%- endmacro -%}
+{%- macro remote_url() -%}https://github.com/LB45440078L/Ferrocord{%- endmacro -%}
 {% if version -%}
   {%- set v = version | trim_start_matches(pat="v") -%}
 ## [{{ v }}]({{ self::remote_url() }}/releases/tag/v{{ v }}) - {{ timestamp | date(format="%Y-%m-%d") }}
@@ -57,7 +57,7 @@ tag_pattern = "v[0-9]+\\.[0-9]+\\.[0-9]+.*"
 ignore_tags = "v[0-9]+\\.[0-9]+\\.[0-9]+-.*"
 commit_preprocessors = [
   # "(#123)" -> link to the pull request / issue
-  { pattern = '\((\w+\s)?#([0-9]+)\)', replace = "([#${2}](https://github.com/ferrocord/ferrocord/issues/${2}))" },
+  { pattern = '\((\w+\s)?#([0-9]+)\)', replace = "([#${2}](https://github.com/LB45440078L/Ferrocord/issues/${2}))" },
 ]
 # First match wins. Group names carry an HTML comment so they sort in Keep a
 # Changelog order; `striptags` removes it when rendering.

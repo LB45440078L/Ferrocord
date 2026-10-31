@@ -3,12 +3,12 @@
 
 Usage::
 
-    python3 packaging/homebrew/render-cask.py --version 0.2.0 --repository ferrocord/ferrocord \\
+    python3 packaging/homebrew/render-cask.py --version 0.2.0 --repository LB45440078L/Ferrocord \\
         --arm64-dmg dist/ferrocord-0.2.0-macos-arm64.dmg \\
         --x86_64-dmg dist/ferrocord-0.2.0-macos-x86_64.dmg \\
         [--notarized] --output Casks/ferrocord.rb
 
-The cask is published to the project's tap (``brew install --cask ferrocord/tap/ferrocord``)
+The cask is published to the project's tap (``brew install --cask lb45440078l/tap/ferrocord``)
 by the release workflow; see docs/RELEASING.md. Without ``--notarized`` the cask tells
 users how to approve the first launch, since Gatekeeper blocks unnotarized apps.
 """

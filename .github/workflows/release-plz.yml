@@ -26,7 +26,7 @@ concurrency:
 jobs:
   release-pr:
     name: Open or update the release PR
-    if: github.repository_owner == 'ferrocord'
+    if: github.repository_owner == 'LB45440078L'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -46,7 +46,7 @@ jobs:
 
   release:
     name: Tag merged release
-    if: github.repository_owner == 'ferrocord'
+    if: github.repository_owner == 'LB45440078L'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:

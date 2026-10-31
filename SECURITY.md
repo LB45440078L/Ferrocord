@@ -4,7 +4,7 @@
 
 Please **do not** open a public issue for security problems. Report them
 privately through GitHub's *Security → Report a vulnerability* on this
-repository, or by email to the maintainers. Include steps to reproduce and the
+repository, or by email to ambercode@tutamail.com. Include steps to reproduce and the
 affected version or commit. We aim to acknowledge reports within 72 hours.
 
 ## What we consider in scope

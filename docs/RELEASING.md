@@ -291,7 +291,7 @@ the tap repository), the cask is committed to `Casks/ferrocord.rb` in
 `<owner>/homebrew-tap` (override with the `HOMEBREW_TAP` repository variable).
 
 ```sh
-brew install --cask ferrocord/tap/ferrocord
+brew install --cask lb45440078l/tap/ferrocord
 ```
 
 Submitting to the main `homebrew/cask` repository requires notarized builds and

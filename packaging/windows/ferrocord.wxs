@@ -26,7 +26,7 @@
      xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
 
   <Package Name="Ferrocord"
-           Manufacturer="Ferrocord Contributors"
+           Manufacturer="AmberCode"
            Version="$(var.Version)"
            UpgradeCode="6F2B9C4E-3A1D-4E7B-9F0C-2D8E5A7B1C93"
            Scope="perUserOrMachine"
@@ -43,9 +43,9 @@
     <!-- Apps & Features entry -->
     <Icon Id="FerrocordIcon" SourceFile="$(var.IconFile)" />
     <Property Id="ARPPRODUCTICON" Value="FerrocordIcon" />
-    <Property Id="ARPURLINFOABOUT" Value="https://github.com/ferrocord/ferrocord" />
-    <Property Id="ARPHELPLINK" Value="https://github.com/ferrocord/ferrocord/issues" />
-    <Property Id="ARPURLUPDATEINFO" Value="https://github.com/ferrocord/ferrocord/releases" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/LB45440078L/Ferrocord" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/LB45440078L/Ferrocord/issues" />
+    <Property Id="ARPURLUPDATEINFO" Value="https://github.com/LB45440078L/Ferrocord/releases" />
     <Property Id="ARPCOMMENTS" Value="A fast, open-source Discord client" />
     <Property Id="DisableAdvtShortcuts" Value="1" />
 

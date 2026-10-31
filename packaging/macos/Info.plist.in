@@ -35,7 +35,7 @@
   <key>NSSupportsAutomaticGraphicsSwitching</key>
   <true/>
   <key>NSHumanReadableCopyright</key>
-  <string>Copyright (c) Ferrocord contributors. BSD-3-Clause license.</string>
+  <string>Copyright (c) 2026 AmberCode. BSD-3-Clause license.</string>
   <key>NSCameraUsageDescription</key>
   <string>Ferrocord uses the camera only when you turn on video in a call.</string>
   <key>NSMicrophoneUsageDescription</key>

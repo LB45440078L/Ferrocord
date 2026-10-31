@@ -32,8 +32,8 @@ fn embed_windows_resources() {
         .set_language(0x0409) // en-US
         .set("ProductName", "Ferrocord")
         .set("FileDescription", "Ferrocord")
-        .set("CompanyName", "Ferrocord contributors")
-        .set("LegalCopyright", "Copyright (c) Ferrocord contributors. BSD-3-Clause license.")
+        .set("CompanyName", "AmberCode")
+        .set("LegalCopyright", "Copyright (c) 2026 AmberCode. BSD-3-Clause license.")
         .set("OriginalFilename", "ferrocord.exe")
         .set("InternalName", "ferrocord")
         .set("FileVersion", &version)
