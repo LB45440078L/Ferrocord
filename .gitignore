@@ -26,3 +26,4 @@ api-token.txt
 /re/
 /scratch/
 *.asar
+/dist/

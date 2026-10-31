@@ -4,3 +4,4 @@
 *.ttf binary
 *.bmp binary
 *.icns binary
+*.cmd text eol=crlf

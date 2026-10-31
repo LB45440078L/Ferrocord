@@ -67,6 +67,14 @@ and on macOS you approve the first launch in *System Settings > Privacy &
 Security*. Every release lists SHA-256 checksums and build provenance
 attestations. See [docs/USAGE.md](docs/USAGE.md#installing) for details.
 
+To build the packages yourself, run `scripts\build-windows.cmd` on Windows,
+`scripts/build-linux.sh` on Debian/Ubuntu or `scripts/build-macos.sh` on a Mac
+(see [docs/RELEASING.md](docs/RELEASING.md#building-packages-locally)).
+
+To build the packages yourself, run `scriptsuild-windows.cmd` on Windows,
+`scripts/build-linux.sh` on Debian/Ubuntu or `scripts/build-macos.sh` on a Mac
+(see [docs/RELEASING.md](docs/RELEASING.md#building-packages-locally)).
+
 ## Quick start
 
 ```sh

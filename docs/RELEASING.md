@@ -303,6 +303,42 @@ is already AppStream-valid.
 
 ## Building packages locally
 
+The easy way: one script per platform checks every tool, offers to install what
+is missing, builds, and writes the packages to `dist/`.
+
+| On | Run | Produces |
+|---|---|---|
+| Windows 10/11 | double-click `scripts\build-windows.cmd` (or `.\scripts\build-windows.ps1`) | `.msi` + `.zip` for x64 and ARM64, then the Linux packages through WSL2 |
+| Linux (Debian/Ubuntu) or WSL2 | `bash scripts/build-linux.sh` | `.deb`, `.rpm`, `.AppImage`, `.tar.gz` for this machine's architecture |
+| macOS (Apple Silicon) | `bash scripts/build-macos.sh` | `ferrocord-X-macos-arm64.dmg` (`--intel` adds the x86_64 image) |
+
+Useful options: `-Yes`/`--yes` installs without asking, `-Quick`/`--quick` uses
+the faster `release` profile, and `-Arch x64`, `-SkipLinux` and `-LinuxOnly`
+narrow the Windows run. Under WSL the sources are copied into the Linux
+filesystem (`~/.cache/ferrocord-build`) because building on `/mnt/c` is very
+slow. macOS disk images can only be made on a Mac.
+
+The manual steps below are what those scripts run.
+
+
+The easy way: one script per platform checks every tool, offers to install what
+is missing, builds, and writes the packages to `dist/`.
+
+| On | Run | Produces |
+|---|---|---|
+| Windows 10/11 | double-click `scriptsuild-windows.cmd` (or `.\scriptsuild-windows.ps1`) | `.msi` + `.zip` for x64 and ARM64, then the Linux packages through WSL2 |
+| Linux (Debian/Ubuntu) or WSL2 | `bash scripts/build-linux.sh` | `.deb`, `.rpm`, `.AppImage`, `.tar.gz` for this machine's architecture |
+| macOS (Apple Silicon) | `bash scripts/build-macos.sh` | `ferrocord-X-macos-arm64.dmg` (`--intel` adds the x86_64 image) |
+
+Useful options: `-Yes`/`--yes` installs without asking, `-Quick`/`--quick` uses
+the faster `release` profile, `-Arch x64`, `-SkipLinux` and `-LinuxOnly` narrow
+the Windows run. Under WSL the sources are copied into the Linux filesystem
+(`~/.cache/ferrocord-build`) because building on `/mnt/c` is very slow. macOS
+disk images can only be made on a Mac.
+
+The manual steps below are what those scripts run.
+
+
 ```sh
 cargo build --locked --profile dist --target x86_64-unknown-linux-gnu -p ferrocord
 cargo install --locked cargo-deb cargo-generate-rpm
