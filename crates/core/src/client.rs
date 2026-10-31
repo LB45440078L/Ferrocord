@@ -88,18 +88,34 @@ pub struct Notification {
 pub struct ClientOptions {
     /// Fetch the live web client build number on startup (network access).
     pub refresh_build_number: bool,
+    /// REST API root including the version, e.g. `https://discord.com/api/v9`.
+    pub api_base: String,
+    /// Gateway websocket base URL (without query string).
+    pub gateway_url: String,
+    /// Save/restore tokens in the OS credential vault. Disable in tests.
+    pub persist_credentials: bool,
 }
 
 impl Default for ClientOptions {
     fn default() -> Self {
-        Self { refresh_build_number: true }
+        Self {
+            refresh_build_number: true,
+            api_base: ferrocord_http::API_BASE.to_string(),
+            gateway_url: ferrocord_gateway::DEFAULT_GATEWAY.to_string(),
+            persist_credentials: true,
+        }
     }
 }
 
 impl ClientOptions {
     /// No background network activity: for tests and offline demos.
     pub fn offline() -> Self {
-        Self { refresh_build_number: false }
+        Self { refresh_build_number: false, persist_credentials: false, ..Self::default() }
+    }
+
+    /// Points the client at a mock or staging server (no build-number fetch).
+    pub fn custom_endpoints(api_base: impl Into<String>, gateway_url: impl Into<String>) -> Self {
+        Self { refresh_build_number: false, api_base: api_base.into(), gateway_url: gateway_url.into(), persist_credentials: false }
     }
 }
 
@@ -125,6 +141,8 @@ struct Inner {
     /// Channel currently shown in the UI (suppresses notifications for it).
     focused_channel: RwLock<Option<Snowflake>>,
     window_focused: RwLock<bool>,
+    gateway_url: String,
+    persist_credentials: bool,
 }
 
 /// The Ferrocord client. Cheap to clone; all clones share state.
@@ -143,7 +161,7 @@ impl Client {
     pub fn with_options(rt: tokio::runtime::Handle, paths: Paths, options: ClientOptions) -> Self {
         paths.ensure();
         let config = Config::load(&paths);
-        let http = Http::new(ferrocord_http::ClientProfile::desktop());
+        let http = Http::with_base_url(ferrocord_http::ClientProfile::desktop(), &options.api_base);
         let (events, _) = broadcast::channel(4096);
         let client = Self {
             inner: Arc::new(Inner {
@@ -162,6 +180,8 @@ impl Client {
                 subscriptions: Mutex::new(HashMap::new()),
                 focused_channel: RwLock::new(None),
                 window_focused: RwLock::new(true),
+                gateway_url: options.gateway_url.clone(),
+                persist_credentials: options.persist_credentials,
             }),
         };
         client.add_extension(Arc::new(crate::extension::BuiltinCommands));
@@ -284,6 +304,9 @@ impl Client {
 
     /// Restores the last session from the credential vault, if any.
     pub fn try_resume_saved_session(&self) -> bool {
+        if !self.inner.persist_credentials {
+            return false;
+        }
         let Some(account) = self.inner.config.read().last_account.clone() else { return false };
         match TokenStore::load(&account) {
             Some(token) => {
@@ -302,6 +325,7 @@ impl Client {
         self.inner.subscriptions.lock().clear();
         self.inner.http.set_token(Some(token.clone()));
         let mut cfg = GatewayConfig::new(token, self.inner.http.profile());
+        cfg.url = self.inner.gateway_url.clone();
         cfg.presence = UpdatePresence::default();
         let client = self.clone();
         let _guard = self.inner.rt.enter();
@@ -327,7 +351,9 @@ impl Client {
 
     fn end_session(&self, reason: &str) {
         self.stop_gateway();
-        if let Some(acc) = self.inner.config.read().last_account.clone() {
+        if let Some(acc) = self.inner.config.read().last_account.clone()
+            && self.inner.persist_credentials
+        {
             let _ = TokenStore::delete(&acc);
         }
         self.update_config(|c| c.last_account = None);
@@ -386,7 +412,9 @@ impl Client {
             if r.auth_token.is_some() {
                 self.inner.http.set_token(Some(t.clone()));
             }
-            if let Err(e) = TokenStore::save(&account, t) {
+            if self.inner.persist_credentials
+                && let Err(e) = TokenStore::save(&account, t)
+            {
                 tracing::warn!(error = %e, "could not save token to credential vault");
             }
         }

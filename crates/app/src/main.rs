@@ -18,7 +18,7 @@ mod tests;
 
 use std::sync::Arc;
 
-use ferrocord_core::{Client, Paths};
+use ferrocord_core::{Client, ClientOptions, Paths};
 use tracing_subscriber::EnvFilter;
 
 fn main() -> anyhow::Result<()> {
@@ -26,10 +26,15 @@ fn main() -> anyhow::Result<()> {
     if args.get(1).map(String::as_str) == Some(captcha::HELPER_FLAG) {
         captcha::run_helper(args.get(2).cloned());
     }
+    if args.iter().any(|a| a == "--version" || a == "-V") {
+        println!("ferrocord {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
     if args.iter().any(|a| a == "--help" || a == "-h") {
         println!(
             "Ferrocord {}\n\nUSAGE:\n  ferrocord [--demo]\n\nOPTIONS:\n  --demo               Explore the UI with offline sample data (no login)
-  --demo-view <VIEW>   Demo mode opened on a view: settings, emoji, friends, quick, dm\n\nENVIRONMENT:\n  RUST_LOG  Log filter, e.g. RUST_LOG=ferrocord=debug",
+  --demo-view <VIEW>   Demo mode opened on a view: settings, emoji, friends, quick, dm
+  -V, --version        Print version and exit\n\nENVIRONMENT:\n  RUST_LOG  Log filter, e.g. RUST_LOG=ferrocord=debug",
             env!("CARGO_PKG_VERSION")
         );
         return Ok(());
@@ -46,7 +51,8 @@ fn main() -> anyhow::Result<()> {
 
     let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(4).thread_name("ferrocord-rt").enable_all().build()?;
     let paths = Paths::discover();
-    let client = Client::new(runtime.handle().clone(), paths.clone());
+    let options = if demo { ClientOptions::offline() } else { ClientOptions::default() };
+    let client = Client::with_options(runtime.handle().clone(), paths.clone(), options);
     client.http().set_captcha_solver(Some(Arc::new(captcha::WebViewCaptcha { data_dir: paths.cache_dir.clone() })));
 
     let options = eframe::NativeOptions {

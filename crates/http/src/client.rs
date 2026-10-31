@@ -177,6 +177,12 @@ pub struct Http {
 
 impl Http {
     pub fn new(profile: ClientProfile) -> Self {
+        Self::with_base_url(profile, API_BASE)
+    }
+
+    /// Creates a client against a different API root (mock servers, staging).
+    /// `base` must include the version path, e.g. `http://127.0.0.1:1234/api/v9`.
+    pub fn with_base_url(profile: ClientProfile, base: &str) -> Self {
         let client = reqwest::Client::builder()
             .user_agent(profile.user_agent())
             .connect_timeout(Duration::from_secs(10))
@@ -187,7 +193,7 @@ impl Http {
         Self {
             inner: Arc::new(Inner {
                 client,
-                base: API_BASE.into(),
+                base: base.trim_end_matches('/').to_string(),
                 token: RwLock::new(None),
                 fingerprint: RwLock::new(None),
                 profile: RwLock::new(profile),
@@ -196,6 +202,10 @@ impl Http {
                 mfa: RwLock::new(None),
             }),
         }
+    }
+
+    pub fn base_url(&self) -> &str {
+        &self.inner.base
     }
 
     pub fn raw_client(&self) -> &reqwest::Client {

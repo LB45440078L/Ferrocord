@@ -65,11 +65,16 @@ pub enum RemoteAuthEvent {
 /// Starts the QR flow. The task keeps regenerating codes until a token is
 /// obtained or the receiver is dropped.
 pub fn start(http: Http) -> mpsc::Receiver<RemoteAuthEvent> {
+    start_with_url(http, REMOTE_AUTH_GATEWAY.to_string())
+}
+
+/// Like [`start`] but against another remote-auth gateway (tests, mock servers).
+pub fn start_with_url(http: Http, url: String) -> mpsc::Receiver<RemoteAuthEvent> {
     let (tx, rx) = mpsc::channel(16);
     tokio::spawn(async move {
         let mut backoff = 1u64;
         loop {
-            match session(&http, &tx).await {
+            match session(&http, &url, &tx).await {
                 Ok(true) => return,
                 Ok(false) => backoff = 1,
                 Err(e) => {
@@ -96,7 +101,7 @@ fn decrypt(key: &RsaPrivateKey, b64: &str) -> Result<Vec<u8>, String> {
 
 /// Runs one remote-auth websocket session. `Ok(true)` = token delivered,
 /// `Ok(false)` = session ended normally (timeout/cancel) and should restart.
-async fn session(http: &Http, tx: &mpsc::Sender<RemoteAuthEvent>) -> Result<bool, String> {
+async fn session(http: &Http, url: &str, tx: &mpsc::Sender<RemoteAuthEvent>) -> Result<bool, String> {
     let key = tokio::task::spawn_blocking(|| RsaPrivateKey::new(&mut rand::thread_rng(), 2048)).await.map_err(|e| e.to_string())?.map_err(|e| e.to_string())?;
     let spki = RsaPublicKey::from(&key).to_public_key_der().map_err(|e| e.to_string())?;
     let encoded_public_key = STANDARD.encode(spki.as_bytes());
@@ -104,7 +109,7 @@ async fn session(http: &Http, tx: &mpsc::Sender<RemoteAuthEvent>) -> Result<bool
 
     let req = {
         use tokio_tungstenite::tungstenite::client::IntoClientRequest;
-        let mut r = REMOTE_AUTH_GATEWAY.into_client_request().map_err(|e| e.to_string())?;
+        let mut r = url.into_client_request().map_err(|e| e.to_string())?;
         r.headers_mut().insert("origin", "https://discord.com".parse().expect("static header"));
         if let Ok(ua) = http.profile().user_agent().parse() {
             r.headers_mut().insert("user-agent", ua);
