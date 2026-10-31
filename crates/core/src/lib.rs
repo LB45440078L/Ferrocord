@@ -8,6 +8,7 @@
 mod client;
 pub mod config;
 pub mod extension;
+pub mod voice;
 
 pub use client::{Client, ClientEvent, ClientOptions, Notification, error_text};
 pub use config::{Config, Paths, Theme};
@@ -18,3 +19,4 @@ pub use ferrocord_gateway::{ConnectionState, GatewayHandle};
 pub use ferrocord_http as http;
 pub use ferrocord_model as model;
 pub use ferrocord_store as store;
+pub use ferrocord_voice as voice_engine;

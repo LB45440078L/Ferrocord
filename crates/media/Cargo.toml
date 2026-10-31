@@ -1,0 +1,39 @@
+[package]
+name = "ferrocord-media"
+description = "Video media layer for Ferrocord: camera capture, H.264 encode/decode and RFC 6184 RTP packetization"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = ["camera", "h264"]
+# Webcam capture through nokhwa (MediaFoundation / V4L2 / AVFoundation) with a
+# pure-Rust MJPEG decoder (zune-jpeg).
+camera = ["dep:nokhwa", "dep:zune-jpeg"]
+# H.264 encoding/decoding through Cisco's OpenH264, compiled from the bundled
+# source (no NASM needed). H.264 is patent-encumbered: packagers who cannot ship
+# their own H.264 build can disable this feature; the RTP packetizer and pixel
+# conversion utilities stay available.
+h264 = ["dep:openh264", "dep:openh264-sys2"]
+
+[dependencies]
+thiserror.workspace = true
+tracing.workspace = true
+parking_lot.workspace = true
+openh264 = { workspace = true, optional = true }
+openh264-sys2 = { workspace = true, optional = true }
+zune-jpeg = { workspace = true, optional = true }
+
+# nokhwa's backends are per-platform; only enable the one that compiles on the target.
+[target.'cfg(target_os = "windows")'.dependencies]
+nokhwa = { workspace = true, optional = true, features = ["input-msmf"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+nokhwa = { workspace = true, optional = true, features = ["input-v4l"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+nokhwa = { workspace = true, optional = true, features = ["input-avfoundation"] }
+
+[dev-dependencies]
+proptest.workspace = true

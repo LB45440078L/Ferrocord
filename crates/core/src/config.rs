@@ -14,6 +14,7 @@ pub struct Config {
     pub api: ApiConfig,
     pub plugins: PluginConfig,
     pub privacy: Privacy,
+    pub voice: VoiceConfig,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -109,6 +110,28 @@ pub struct Privacy {
 impl Default for Privacy {
     fn default() -> Self {
         Self { send_typing: true, auto_ack: true }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct VoiceConfig {
+    /// Input device name (`None` = system default).
+    pub input_device: Option<String>,
+    pub output_device: Option<String>,
+    /// Microphone gain multiplier (1.0 = unchanged).
+    pub input_gain: f32,
+    /// Speaker volume multiplier.
+    pub output_volume: f32,
+    /// Voice activity threshold in dBFS; quieter input is not transmitted.
+    pub sensitivity_db: f32,
+    /// Camera index used for video.
+    pub camera: Option<u32>,
+}
+
+impl Default for VoiceConfig {
+    fn default() -> Self {
+        Self { input_device: None, output_device: None, input_gain: 1.0, output_volume: 1.0, sensitivity_db: -50.0, camera: None }
     }
 }
 

@@ -12,6 +12,7 @@ ferrocord-http.workspace = true
 ferrocord-gateway.workspace = true
 ferrocord-auth.workspace = true
 ferrocord-store.workspace = true
+ferrocord-voice.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
@@ -21,3 +22,7 @@ parking_lot.workspace = true
 directories.workspace = true
 toml.workspace = true
 chrono.workspace = true
+
+[dev-dependencies]
+ferrocord-testkit.workspace = true
+tempfile.workspace = true

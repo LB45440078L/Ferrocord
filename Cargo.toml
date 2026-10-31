@@ -9,7 +9,10 @@ members = [
     "crates/core",
     "crates/plugin",
     "crates/api",
+    "crates/voice",
     "crates/app",
+    "crates/testkit",
+    "crates/media",
 ]
 
 [workspace.package]
@@ -29,6 +32,9 @@ ferrocord-store = { path = "crates/store" }
 ferrocord-core = { path = "crates/core" }
 ferrocord-plugin = { path = "crates/plugin" }
 ferrocord-api = { path = "crates/api" }
+ferrocord-voice = { path = "crates/voice" }
+ferrocord-testkit = { path = "crates/testkit" }
+ferrocord-media = { path = "crates/media" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -56,6 +62,13 @@ anyhow = "1"
 mlua = { version = "0.12", features = ["luau", "serde"] }
 axum = { version = "0.8", features = ["ws"] }
 tempfile = "3"
+proptest = "1"
+percent-encoding = "2"
+rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs"] }
+nokhwa = { version = "0.10.11", default-features = false }
+openh264 = { version = "0.9.9", default-features = false, features = ["source"] }
+openh264-sys2 = { version = "0.9.9", default-features = false, features = ["source"] }
+zune-jpeg = "0.5.15"
 
 [profile.release]
 lto = "thin"
@@ -65,3 +78,10 @@ opt-level = 3
 
 [profile.dev.package."*"]
 opt-level = 2
+
+# Distribution builds (release workflow): `cargo build --profile dist`.
+# Slower to build than `release`, smaller and a little faster at run time.
+[profile.dist]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
