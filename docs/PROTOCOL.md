@@ -229,9 +229,88 @@ Updates are sent as **partial** protos with
 - Rate limits follow `X-RateLimit-Bucket` / `-Remaining` / `-Reset-After`. A
   429 body carries `retry_after` (seconds, float) and `global`.
 
+## Voice and video
+
+Taken from the web client's `RTCControlSocket` (voice gateway) and the
+connection setup code. The media engine itself is native (`discord_voice.node`),
+so the transport details below follow Discord's public voice documentation and
+the DAVE whitepaper, and are exercised end to end in `crates/voice/tests/e2e.rs`.
+
+### Joining
+
+1. Main gateway op 4 `{guild_id | null, channel_id, self_mute, self_deaf, self_video, flags: 2}`.
+   For DMs and group DMs `guild_id` is null. If nobody is in the call yet,
+   `POST /channels/{id}/call/ring {recipients: null}` rings the others.
+2. Discord answers with our `VOICE_STATE_UPDATE` (`session_id`) and
+   `VOICE_SERVER_UPDATE` (`token`, `endpoint`; a null endpoint means "wait, the
+   server is being reallocated").
+3. Incoming calls arrive as `CALL_CREATE` / `CALL_UPDATE` with `ringing: [user ids]`
+   and end with `CALL_DELETE`. Declining is `POST /channels/{id}/call/stop-ringing {recipients: [me]}`.
+
+### Voice gateway (v9)
+
+`wss://{endpoint}/?v=9` (v10 when the client supports SFU updates). JSON frames
+are `{op, d, seq?}`. DAVE MLS messages are **binary**: server → client
+`[seq u16 BE][op u8][payload]`, client → server `[op u8][payload]`.
+
+| Op | Name | Direction / payload |
+|---|---|---|
+| 0 | IDENTIFY | `{server_id, channel_id, user_id, session_id, token, max_dave_protocol_version, video, streams:[{type:"video", rid:"100", quality:100}]}` |
+| 1 | SELECT_PROTOCOL | `{protocol:"udp", data:{address, port, mode}, address, port, mode, codecs, rtc_connection_id, experiments}` |
+| 2 | READY | `{ssrc, ip, port, modes, streams:[{type, rid, ssrc, rtx_ssrc, active, quality}]}` |
+| 3 / 6 | HEARTBEAT / ACK | `{t: now_ms, seq_ack}` / `{t}`; the interval is at most 5 s |
+| 4 | SESSION_DESCRIPTION | `{mode, secret_key[32], audio_codec, video_codec, media_session_id, dave_protocol_version}` |
+| 5 | SPEAKING | `{speaking: flags, delay, ssrc}`; the server adds `user_id` |
+| 7 / 9 | RESUME / RESUMED | `{token, session_id, server_id, channel_id, seq_ack}` |
+| 8 | HELLO | `{heartbeat_interval, v}` |
+| 11 / 13 | CLIENTS_CONNECT / CLIENT_DISCONNECT | `{user_ids}` / `{user_id}` |
+| 12 | VIDEO | `{audio_ssrc, video_ssrc, rtx_ssrc, streams}` (both directions) |
+| 15 | MEDIA_SINK_WANTS | e.g. `{"any": 100}` to receive everyone's video |
+| 16 | VOICE_BACKEND_VERSION | sent `{}` after READY |
+| 21–24 | DAVE prepare/execute transition, transition ready, prepare epoch | JSON |
+| 25–30 | DAVE external sender, key package, proposals, commit+welcome, announce commit, welcome | binary |
+| 31 | DAVE invalid commit/welcome | `{transition_id}` |
+
+Codecs (as listed by the official client): `opus` payload type 120; video codecs
+get 101, 103, … in preference order with RTX one higher (H.264 is first, so
+101/102). Close codes 4004/4006/4011/4012/4014/4016/4017 end the session; 4805
+means an invalid DAVE message.
+
+### UDP and transport encryption
+
+- IP discovery: 74-byte request `[type=1 u16][len=70 u16][ssrc u32][address 64][port u16]`,
+  answered with type 2 carrying our public address.
+- Modes: `aead_aes256_gcm_rtpsize` (preferred) and `aead_xchacha20_poly1305_rtpsize`.
+  The RTP header (+ CSRCs + the 4-byte extension header) is AAD; the payload
+  *including the extension body* is encrypted; a 32-bit counter is appended and
+  zero-padded to the AEAD nonce. RTCP uses its 8-byte header as AAD.
+- Audio: Opus, 48 kHz, 20 ms frames, RTP timestamp +960 per frame; five Opus
+  silence frames (`F8 FF FE`) when speech stops.
+- Video: H.264 constrained baseline (`42e01f`), RFC 6184 packetization mode 1,
+  90 kHz clock. RTCP PLI (PT 206, FMT 1) requests keyframes in both directions.
+
+### DAVE end-to-end encryption
+
+MLS (ciphersuite DHKEMP256-AES128GCM-SHA256-P256) with the voice server as
+external sender; per-sender keys are exported from the group and ratcheted per
+generation. Media frames are encrypted *before* RTP packetization with
+codec-aware unencrypted ranges (Opus: none; H.264: NAL headers) and a trailer
+ending in the magic marker `0xFAFA`. Ferrocord uses the `davey` crate (a Rust
+port of Discord's libdave) and implements the gateway choreography:
+
+1. op 4 with `dave_protocol_version` ≥ 1 → create a session and send our key package (op 26).
+2. op 25 external sender → op 27 proposals → we may commit (op 28 = commit ‖ welcome).
+3. op 29 (announce commit, `[transition_id u16][commit]`) or op 30 (welcome) →
+   process, prepare the transition, reply op 23 ready.
+4. op 22 execute transition → switch keys. Transition 0 applies immediately.
+5. op 24 with epoch 1 → a brand-new group: re-initialize. Invalid commits/welcomes
+   or sustained decryption failures → op 31 and rejoin.
+
+Plaintext is never sent once DAVE is negotiated: outgoing frames are dropped
+until keys exist.
+
 ## Not yet covered
 
-The native modules (`discord_voice.node`, `discord_media`, `discord_krisp`) and
-the RTC protocol (voice gateway v8, UDP/RTP, DAVE MLS end-to-end encryption)
-have not been documented or implemented yet. That is the main gap to full
-parity. Contributions welcome.
+Screen share / Go Live (op 18–22 streams), soundboard, activities and the RTC
+latency/region selection are not implemented. Noise suppression (Krisp) and echo
+cancellation are proprietary native features without an open replacement here.

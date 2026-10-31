@@ -52,6 +52,7 @@ different UI can use `ferrocord-core`.
 | Thread | Work |
 |---|---|
 | Main (UI) | eframe/egui event loop and rendering. It never blocks on I/O. |
+| Voice & video | See [Voice and video](#voice-and-video) |
 | Tokio runtime (4 workers) | REST calls, the gateway task, the image downloader, remote auth, the API server |
 | Tokio blocking pool | Image decoding, opening the browser |
 | One thread per plugin | Each owns its Luau VM; it talks to the host through channels with timeouts |
@@ -60,6 +61,36 @@ different UI can use `ferrocord-core`.
 The store is a plain struct behind a `parking_lot::RwLock`. The UI only holds
 the read lock for the duration of one view's data extraction. Views copy what
 they need (usually a handful of visible messages) before drawing.
+
+## Voice and video
+
+`ferrocord-voice` is independent of the rest of the client: `core` collects the
+session id, token and endpoint from the main gateway and hands them to
+`VoiceConnection::connect`.
+
+```text
+ mic ─ cpal thread ─▶ VAD ─▶ Opus ─▶ DAVE ─▶ RTP ─▶ AEAD ─▶ UDP ─┐
+                                                                 ├─▶ Discord media server
+ speakers ◀─ cpal ◀─ mixer (20 ms) ◀─ jitter buffer ◀─ Opus ◀─ DAVE ◀─ AEAD ◀─ UDP ◀─┘
+ camera ─ thread ─▶ H.264 ─▶ DAVE ─▶ RFC 6184 ─▶ RTP ─▶ AEAD ─▶ UDP
+ tiles  ◀─ decode thread ◀─ H.264 ◀─ DAVE ◀─ depacketizer ◀─ UDP (+ PLI on loss)
+```
+
+| Thread / task | Work |
+|---|---|
+| Voice gateway task | Handshake, heartbeats, resume, DAVE opcodes (`dave.rs` is a pure state machine) |
+| Send / receive / mixer tasks | Audio RTP, transport crypto, 20 ms mix clock |
+| Audio device thread | cpal streams (not `Send` on every platform), resampling to/from 48 kHz |
+| Video send thread | Camera, OpenH264 encode (sliced for multi-threading), packetization |
+| Video receive thread | Depacketize, DAVE decrypt, decode, keyframe requests |
+
+The UI never talks to these directly: it reads `voice_engine::Shared`
+(speaking state, levels, latest video frames) each frame.
+
+`crates/voice/tests/e2e.rs` runs two real connections against a mock voice server
+that implements the gateway, UDP relay with per-recipient re-encryption, and the
+DAVE delivery service. It asserts that audio and video arrive and that the relay
+only ever sees DAVE ciphertext.
 
 ## Performance techniques
 
