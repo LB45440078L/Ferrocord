@@ -41,6 +41,12 @@ pub fn chat(app: &mut App, ui: &mut Ui, channel: Snowflake) {
             header(app, ui, channel);
         },
     );
+    let private = app.client.store().channels.get(&channel).is_some_and(|c| matches!(c.kind, ChannelType::Dm | ChannelType::GroupDm));
+    if private && (app.client.voice_channel() == Some(channel) || app.client.call_active(channel)) {
+        Panel::top("dm_call").exact_size(300.0).show_separator_line(false).frame(egui::Frame::new()).show(ui, |ui| {
+            crate::views::voice::call_view(app, ui, channel);
+        });
+    }
     Panel::bottom("composer")
         .resizable(false)
         .show_separator_line(false)
@@ -101,6 +107,13 @@ fn header(app: &mut App, ui: &mut Ui, channel: Snowflake) {
                 let show = app.client.config().appearance.show_member_list;
                 if widgets::icon_button(ui, Icon::Users, "Member list", &pal, show).clicked() {
                     app.client.update_config(|c| c.appearance.show_member_list = !show);
+                }
+            }
+            let private = matches!(kind, ChannelType::Dm | ChannelType::GroupDm);
+            if private && app.client.voice_channel() != Some(channel) {
+                let label = if app.client.call_active(channel) { "Join call" } else { "Start voice call" };
+                if widgets::icon_button(ui, Icon::Phone, label, &pal, false).clicked() && !app.demo {
+                    app.client.join_voice(channel);
                 }
             }
             if widgets::icon_button(ui, Icon::Search, "Search messages", &pal, false).clicked() {

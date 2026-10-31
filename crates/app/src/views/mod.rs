@@ -9,6 +9,7 @@ pub mod members;
 pub mod modals;
 pub mod popups;
 pub mod settings;
+pub mod voice;
 
 use ferrocord_core::model::Snowflake;
 

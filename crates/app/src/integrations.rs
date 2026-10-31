@@ -56,6 +56,8 @@ pub struct Integrations {
     pub search_rx: mpsc::Receiver<Result<(u64, Vec<Message>), String>>,
     /// Full profiles fetched on demand (`None` = request in flight or failed).
     pub profiles: Arc<Mutex<HashMap<Snowflake, Option<UserProfile>>>>,
+    /// Per-user voice volume chosen in this session.
+    volumes: HashMap<Snowflake, f32>,
 }
 
 impl Integrations {
@@ -86,6 +88,7 @@ impl Integrations {
             search_tx,
             search_rx,
             profiles: Arc::default(),
+            volumes: HashMap::new(),
         };
         if demo {
             this.rescan();
@@ -124,6 +127,28 @@ impl Integrations {
             }
         });
         None
+    }
+
+    // ------------------------------------------------------------ voice & video
+
+    pub fn user_volume(&self, user: Snowflake) -> f32 {
+        self.volumes.get(&user).copied().unwrap_or(1.0)
+    }
+
+    pub fn set_user_volume(&mut self, user: Snowflake, volume: f32) {
+        self.volumes.insert(user, volume);
+    }
+
+    /// Latest decoded camera frame for a call participant, as a texture.
+    pub fn video_frame(&self, _user: Snowflake) -> Option<crate::images::Img> {
+        None
+    }
+
+    pub fn toggle_camera(&mut self, client: &Client) -> Result<(), String> {
+        if client.voice_channel().is_none() {
+            return Err("Join a call first".into());
+        }
+        Err("Camera support is not available in this build".into())
     }
 
     // ------------------------------------------------------------ plugins

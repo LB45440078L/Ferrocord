@@ -15,6 +15,7 @@ pub enum Tab {
     Appearance,
     Notifications,
     Privacy,
+    Voice,
     Plugins,
     Api,
     Advanced,
@@ -26,6 +27,7 @@ const TABS: &[(Tab, &str)] = &[
     (Tab::Appearance, "Appearance"),
     (Tab::Notifications, "Notifications"),
     (Tab::Privacy, "Privacy"),
+    (Tab::Voice, "Voice & Video"),
     (Tab::Plugins, "Plugins"),
     (Tab::Api, "Developer API"),
     (Tab::Advanced, "Advanced"),
@@ -105,6 +107,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) -> bool {
                             Tab::Appearance => appearance(app, ui),
                             Tab::Notifications => notifications(app, ui),
                             Tab::Privacy => privacy(app, ui),
+                            Tab::Voice => voice(app, ui),
                             Tab::Plugins => plugins(app, ui),
                             Tab::Api => api(app, ui),
                             Tab::Advanced => advanced(app, ui),
@@ -268,6 +271,85 @@ fn privacy(app: &mut App, ui: &mut Ui) {
     });
     if changed {
         app.client.update_config(|c| c.privacy = cfg);
+    }
+}
+
+fn device_combo(ui: &mut Ui, id: &str, current: &mut Option<String>, options: &[String]) -> bool {
+    let mut changed = false;
+    egui::ComboBox::from_id_salt(id).width(ui.available_width().min(420.0)).selected_text(current.clone().unwrap_or_else(|| "System default".into())).show_ui(
+        ui,
+        |ui| {
+            changed |= ui.selectable_value(current, None, "System default").changed();
+            for o in options {
+                changed |= ui.selectable_value(current, Some(o.clone()), o).changed();
+            }
+        },
+    );
+    changed
+}
+
+fn voice(app: &mut App, ui: &mut Ui) {
+    let pal = app.pal;
+    let mut cfg = app.client.config().voice;
+    let mut changed = false;
+    if app.audio_devices.is_none() {
+        app.audio_devices = Some(ferrocord_core::voice_engine::list_devices());
+    }
+    let (inputs, outputs) = app.audio_devices.clone().unwrap_or_default();
+    card(ui, &pal, |ui| {
+        widgets::section_label(ui, "Input device", &pal);
+        changed |= device_combo(ui, "input_dev", &mut cfg.input_device, &inputs);
+        ui.add_space(8.0);
+        widgets::section_label(ui, "Output device", &pal);
+        changed |= device_combo(ui, "output_dev", &mut cfg.output_device, &outputs);
+        ui.add_space(6.0);
+        if ui.button("Refresh devices").clicked() {
+            app.audio_devices = None;
+        }
+        ui.label(RichText::new("Device changes apply the next time you join a call.").size(12.5).color(pal.text_faint));
+    });
+    card(ui, &pal, |ui| {
+        widgets::section_label(ui, "Input volume", &pal);
+        changed |= ui.add(egui::Slider::new(&mut cfg.input_gain, 0.0..=2.0).custom_formatter(|v, _| format!("{:.0}%", v * 100.0))).changed();
+        widgets::section_label(ui, "Output volume", &pal);
+        changed |= ui.add(egui::Slider::new(&mut cfg.output_volume, 0.0..=2.0).custom_formatter(|v, _| format!("{:.0}%", v * 100.0))).changed();
+    });
+    card(ui, &pal, |ui| {
+        widgets::section_label(ui, "Input sensitivity", &pal);
+        changed |= ui.add(egui::Slider::new(&mut cfg.sensitivity_db, -90.0..=-10.0).suffix(" dB")).changed();
+        // Live meter while in a call: green past the threshold (you would be transmitting).
+        let level = app.client.voice_shared().map(|s| *s.input_level_db.read());
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width().min(420.0), 10.0), egui::Sense::hover());
+        ui.painter().rect_filled(rect, CornerRadius::same(5), pal.bg_elevated);
+        let frac = |db: f32| ((db + 90.0) / 80.0).clamp(0.0, 1.0);
+        if let Some(l) = level {
+            let w = rect.width() * frac(l);
+            let fill = if l >= cfg.sensitivity_db { pal.online } else { pal.warning };
+            ui.painter().rect_filled(egui::Rect::from_min_size(rect.min, egui::vec2(w, rect.height())), CornerRadius::same(5), fill);
+        }
+        let x = rect.min.x + rect.width() * frac(cfg.sensitivity_db);
+        ui.painter().vline(x, rect.y_range().expand(3.0), egui::Stroke::new(2.0, pal.text));
+        ui.label(
+            RichText::new(if level.is_some() {
+                "Speak to test — the bar turns green when you'd be heard."
+            } else {
+                "Join a voice channel to see your microphone level."
+            })
+            .size(12.5)
+            .color(pal.text_faint),
+        );
+    });
+    card(ui, &pal, |ui| {
+        widgets::section_label(ui, "Privacy", &pal);
+        ui.label(
+            RichText::new("Calls are end-to-end encrypted with Discord's DAVE protocol when the server supports it; the shield in the voice panel shows the voice privacy code to compare with others.")
+                .size(13.0)
+                .color(pal.text_muted),
+        );
+    });
+    if changed {
+        app.client.update_config(|c| c.voice = cfg);
+        app.client.refresh_voice_settings();
     }
 }
 

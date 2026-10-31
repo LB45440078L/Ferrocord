@@ -217,6 +217,7 @@ pub fn apply(ctx: &egui::Context, p: &Palette, theme: Theme) {
         s.spacing.interact_size.y = 30.0;
         s.spacing.window_margin = Margin::same(16);
         s.spacing.scroll.bar_width = 8.0;
+        s.spacing.slider_width = 280.0;
         s.spacing.scroll.floating = true;
         s.interaction.selectable_labels = true;
         s.url_in_tooltip = true;

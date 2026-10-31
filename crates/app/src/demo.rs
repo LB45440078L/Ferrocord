@@ -102,6 +102,13 @@ pub fn populate(client: &Client) {
                 "ops": [{ "op": "SYNC", "range": [0, 99], "items": items }] }),
     );
     apply(client, "PRESENCE_UPDATE", json!({ "user": { "id": sid(1003) }, "status": "idle", "activities": [] }));
+    for (uid, mute) in [(1001u64, false), (1003, true), (1002, false)] {
+        apply(
+            client,
+            "VOICE_STATE_UPDATE",
+            json!({ "guild_id": sid(GUILD), "channel_id": sid(VOICE), "user_id": sid(uid), "session_id": "demo", "self_mute": mute, "self_deaf": false, "deaf": false, "mute": false, "self_video": false, "suppress": false }),
+        );
+    }
 
     let msg = |id: u64, ch: u64, author: Value, content: &str, extra: Value| {
         let mut m = json!({ "id": sid(id), "channel_id": sid(ch), "author": author, "content": content, "timestamp": "", "type": 0, "mentions": [], "attachments": [], "embeds": [], "reactions": [] });

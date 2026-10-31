@@ -16,6 +16,13 @@ pub fn sidebar(app: &mut App, ui: &mut Ui) {
         .show(ui, |ui| {
             account_panel(app, ui);
         });
+    // Added after the account panel so it stacks directly above it.
+    if app.client.voice_channel().is_some() {
+        Panel::bottom("voice_panel")
+            .show_separator_line(false)
+            .frame(egui::Frame::new().fill(app.pal.bg_rail.lerp_to_gamma(app.pal.bg_side, 0.5)))
+            .show(ui, |ui| crate::views::voice::connection_panel(app, ui));
+    }
     Panel::top("sidebar_header").exact_size(48.0).show_separator_line(false).frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(12, 0))).show(
         ui,
         |ui| {
@@ -141,8 +148,11 @@ fn channel_row(app: &mut App, ui: &mut Ui, c: &Channel, indent: f32) {
         widgets::count_badge(ui, pos2(rect.max.x - 6.0, rect.center().y), mentions, &pal);
     }
 
-    if resp.clicked() && !c.kind.is_voice() {
+    if resp.clicked() {
         app.select_channel(c.id);
+    }
+    if c.kind.is_voice() && app.client.voice_channel() == Some(c.id) {
+        ui.painter().rect_stroke(rect, CornerRadius::same(6), egui::Stroke::new(1.0, pal.online.gamma_multiply(0.6)), egui::StrokeKind::Inside);
     }
     let resp =
         if let Some(topic) = c.topic.as_ref().filter(|t| !t.is_empty()) { resp.on_hover_text(topic.chars().take(300).collect::<String>()) } else { resp };
@@ -170,10 +180,7 @@ fn channel_row(app: &mut App, ui: &mut Ui, c: &Channel, indent: f32) {
 }
 
 fn voice_members(app: &mut App, ui: &mut Ui, channel: Snowflake) {
-    let users: Vec<(Snowflake, bool, bool)> = {
-        let s = app.client.store();
-        s.voice_states.values().filter(|v| v.channel_id == Some(channel)).map(|v| (v.user_id, v.self_mute || v.mute, v.self_deaf || v.deaf)).collect()
-    };
+    let users: Vec<(Snowflake, bool, bool)> = crate::views::voice::participants(app, channel).into_iter().map(|p| (p.0, p.3, p.4)).collect();
     for (u, mute, deaf) in users {
         let (url, name) = {
             let s = app.client.store();
@@ -181,7 +188,8 @@ fn voice_members(app: &mut App, ui: &mut Ui, channel: Snowflake) {
         };
         ui.horizontal(|ui| {
             ui.add_space(30.0);
-            widgets::avatar(ui, &app.images, &url, 20.0, None, &app.pal);
+            let r = widgets::avatar(ui, &app.images, &url, 20.0, None, &app.pal);
+            crate::views::voice::speaking_ring(ui, r.rect, crate::views::voice::is_speaking(app, channel, u), &app.pal);
             ui.label(RichText::new(name).size(13.0).color(app.pal.text_muted));
             if deaf {
                 icons::icon(ui, Icon::HeadphonesOff, 14.0, app.pal.danger);
@@ -358,6 +366,7 @@ fn account_panel(app: &mut App, ui: &mut Ui) {
             if widgets::icon_button(ui, Icon::Settings, "User settings", &pal, false).clicked() {
                 app.modal = Some(Modal::Settings);
             }
+            crate::views::voice::self_controls(app, ui);
         });
     });
 }

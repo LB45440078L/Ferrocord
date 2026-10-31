@@ -76,6 +76,7 @@ pub enum Modal {
     Pins { channel: Snowflake, messages: Option<Vec<ferrocord_core::model::Message>> },
     JoinServer { code: String, status: Option<String> },
     CustomStatus { text: String },
+    IncomingCall { channel: Snowflake },
     Search { query: String, results: Option<(u64, Vec<ferrocord_core::model::Message>)>, searching: bool },
 }
 
@@ -108,6 +109,8 @@ pub struct App {
     pub emoji_query: String,
     pub ext: crate::integrations::Integrations,
     pub demo: bool,
+    /// Cached audio device names (inputs, outputs) for settings.
+    pub audio_devices: Option<(Vec<String>, Vec<String>)>,
     window_focused: bool,
     last_title: String,
 }
@@ -156,6 +159,7 @@ impl App {
             emoji_query: String::new(),
             ext,
             demo,
+            audio_devices: None,
             window_focused: true,
             last_title: String::new(),
         };
@@ -182,6 +186,16 @@ impl App {
                     }
                 }
                 Some("quick") => app.modal = Some(Modal::QuickSwitcher { query: String::new(), index: 0 }),
+                Some("call") => {
+                    let voice = app.client.store().channels.values().find(|c| c.kind.is_voice()).map(|c| c.id);
+                    if let Some(v) = voice {
+                        app.select_channel(v);
+                    }
+                }
+                Some("voice-settings") => {
+                    app.settings_tab = views::settings::Tab::Voice;
+                    app.modal = Some(Modal::Settings);
+                }
                 _ => {}
             }
         }
@@ -245,6 +259,26 @@ impl App {
                     crate::notify::show(&n, cfg.show_content, cfg.sound);
                 }
             }
+            ClientEvent::IncomingCall { channel_id } => {
+                self.modal = Some(Modal::IncomingCall { channel: channel_id });
+                crate::notify::show(
+                    &ferrocord_core::Notification {
+                        title: "Incoming call".into(),
+                        body: self.client.store().channels.get(&channel_id).map(|c| c.display_name()).unwrap_or_default(),
+                        channel_id,
+                        guild_id: None,
+                        message_id: Snowflake(0),
+                        icon_url: None,
+                    },
+                    true,
+                    true,
+                );
+            }
+            ClientEvent::CallEnded { channel_id } => {
+                if matches!(self.modal, Some(Modal::IncomingCall { channel }) if channel == channel_id) {
+                    self.modal = None;
+                }
+            }
             ClientEvent::Connection(ConnectionState::Connected) if matches!(self.screen, Screen::Connecting) => {}
             _ => {}
         }
@@ -278,7 +312,12 @@ impl App {
             (c.and_then(|c| c.guild_id), c.map(|c| c.kind).unwrap_or_default())
         };
         if kind.is_voice() {
-            self.toast("Voice and video aren't supported yet — text chat in voice channels is coming soon.", false);
+            if self.client.voice_channel() != Some(channel) && !self.demo {
+                self.client.join_voice(channel);
+            }
+            self.nav.guild = guild;
+            self.nav.channel = Some(channel);
+            self.nav.last_channel.insert(guild, channel);
             return;
         }
         if matches!(kind, ferrocord_core::model::ChannelType::GuildForum | ferrocord_core::model::ChannelType::GuildMedia) {
@@ -322,6 +361,13 @@ impl App {
             self.client.open_channel(channel);
         }
         self.client.set_focus(Some(channel), self.window_focused);
+    }
+
+    /// Turns the camera on or off in the current call.
+    pub fn toggle_camera(&mut self) {
+        if let Err(e) = self.ext.toggle_camera(&self.client) {
+            self.toast(e, true);
+        }
     }
 
     pub fn open_dm_with(&mut self, user: Snowflake) {
@@ -458,6 +504,7 @@ impl App {
         }
         egui::CentralPanel::no_frame().show(ui, |ui| {
             ui.painter().rect_filled(ui.max_rect(), CornerRadius::ZERO, self.pal.bg_main);
+            let is_voice = self.nav.channel.and_then(|c| self.client.store().channels.get(&c).map(|c| c.kind.is_voice())).unwrap_or(false);
             let is_forum = self
                 .nav
                 .channel
@@ -471,6 +518,7 @@ impl App {
                 .unwrap_or(false);
             match self.nav.channel {
                 Some(ch) if is_forum => views::forum::forum(self, ui, ch),
+                Some(ch) if is_voice => views::voice::call_view(self, ui, ch),
                 Some(ch) => views::chat::chat(self, ui, ch),
                 None if self.nav.guild.is_none() => views::friends::page(self, ui),
                 None => {

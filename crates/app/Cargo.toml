@@ -6,6 +6,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 default-run = "ferrocord"
+build = "build.rs"
 
 [[bin]]
 name = "ferrocord"
@@ -43,3 +44,88 @@ base64.workspace = true
 [dev-dependencies]
 egui_kittest = { version = "0.37", features = ["eframe"] }
 tempfile = "3"
+
+# Embeds the icon and VERSIONINFO into ferrocord.exe (Windows targets only; see build.rs).
+[build-dependencies]
+winresource = { version = "0.1.34", default-features = false }
+
+# ---------------------------------------------------------------------------
+# Packaging metadata (release engineering; see docs/RELEASING.md).
+# The binary path `target/release/ferrocord` is rewritten by cargo-deb and
+# cargo-generate-rpm to `target/<triple>/<profile>/` when `--target`/`--profile` are given.
+# ---------------------------------------------------------------------------
+
+[package.metadata.deb]
+name = "ferrocord"
+maintainer = "Ferrocord maintainers <maintainers@ferrocord.dev>"
+copyright = "Ferrocord contributors"
+license-file = ["../../LICENSE", "0"]
+extended-description = """\
+Ferrocord is a fast, lightweight, unofficial Discord client written in Rust. \
+It is a single native binary with an immediate-mode GPU UI, a sandboxed Luau \
+plugin system and a local API for your own tools."""
+section = "net"
+priority = "optional"
+# $auto adds the libraries the binary links (webkit2gtk-4.1, gtk3, glib, dbus, ...).
+# The rest are loaded with dlopen() by winit/glutin and are invisible to dpkg-shlibdeps.
+depends = "$auto, libwebkit2gtk-4.1-0, libgtk-3-0, libxkbcommon0, libxkbcommon-x11-0, libegl1, libgl1, libwayland-client0, libwayland-cursor0, libwayland-egl1, libx11-6, libx11-xcb1, libxcursor1, libxrandr2, libxi6"
+suggests = "gnome-keyring | kwalletmanager | keepassxc"
+assets = [
+    ["target/release/ferrocord", "usr/bin/", "755"],
+    ["../../packaging/linux/dev.ferrocord.Ferrocord.desktop", "usr/share/applications/", "644"],
+    ["../../packaging/linux/dev.ferrocord.Ferrocord.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["../../packaging/icons/hicolor/16x16/apps/dev.ferrocord.Ferrocord.png", "usr/share/icons/hicolor/16x16/apps/", "644"],
+    ["../../packaging/icons/hicolor/22x22/apps/dev.ferrocord.Ferrocord.png", "usr/share/icons/hicolor/22x22/apps/", "644"],
+    ["../../packaging/icons/hicolor/24x24/apps/dev.ferrocord.Ferrocord.png", "usr/share/icons/hicolor/24x24/apps/", "644"],
+    ["../../packaging/icons/hicolor/32x32/apps/dev.ferrocord.Ferrocord.png", "usr/share/icons/hicolor/32x32/apps/", "644"],
+    ["../../packaging/icons/hicolor/48x48/apps/dev.ferrocord.Ferrocord.png", "usr/share/icons/hicolor/48x48/apps/", "644"],
+    ["../../packaging/icons/hicolor/64x64/apps/dev.ferrocord.Ferrocord.png", "usr/share/icons/hicolor/64x64/apps/", "644"],
+    ["../../packaging/icons/hicolor/128x128/apps/dev.ferrocord.Ferrocord.png", "usr/share/icons/hicolor/128x128/apps/", "644"],
+    ["../../packaging/icons/hicolor/256x256/apps/dev.ferrocord.Ferrocord.png", "usr/share/icons/hicolor/256x256/apps/", "644"],
+    ["../../packaging/icons/hicolor/512x512/apps/dev.ferrocord.Ferrocord.png", "usr/share/icons/hicolor/512x512/apps/", "644"],
+    ["../../packaging/icons/hicolor/scalable/apps/dev.ferrocord.Ferrocord.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["../../README.md", "usr/share/doc/ferrocord/", "644"],
+]
+
+[package.metadata.generate-rpm]
+name = "ferrocord"
+summary = "Fast, open-source Discord client written in Rust"
+license = "BSD-3-Clause"
+url = "https://github.com/ferrocord/ferrocord"
+release = "1"
+assets = [
+    { source = "target/release/ferrocord", dest = "/usr/bin/ferrocord", mode = "755" },
+    { source = "packaging/linux/dev.ferrocord.Ferrocord.desktop", dest = "/usr/share/applications/dev.ferrocord.Ferrocord.desktop", mode = "644" },
+    { source = "packaging/linux/dev.ferrocord.Ferrocord.metainfo.xml", dest = "/usr/share/metainfo/dev.ferrocord.Ferrocord.metainfo.xml", mode = "644" },
+    { source = "packaging/icons/hicolor/16x16/apps/dev.ferrocord.Ferrocord.png", dest = "/usr/share/icons/hicolor/16x16/apps/dev.ferrocord.Ferrocord.png", mode = "644" },
+    { source = "packaging/icons/hicolor/22x22/apps/dev.ferrocord.Ferrocord.png", dest = "/usr/share/icons/hicolor/22x22/apps/dev.ferrocord.Ferrocord.png", mode = "644" },
+    { source = "packaging/icons/hicolor/24x24/apps/dev.ferrocord.Ferrocord.png", dest = "/usr/share/icons/hicolor/24x24/apps/dev.ferrocord.Ferrocord.png", mode = "644" },
+    { source = "packaging/icons/hicolor/32x32/apps/dev.ferrocord.Ferrocord.png", dest = "/usr/share/icons/hicolor/32x32/apps/dev.ferrocord.Ferrocord.png", mode = "644" },
+    { source = "packaging/icons/hicolor/48x48/apps/dev.ferrocord.Ferrocord.png", dest = "/usr/share/icons/hicolor/48x48/apps/dev.ferrocord.Ferrocord.png", mode = "644" },
+    { source = "packaging/icons/hicolor/64x64/apps/dev.ferrocord.Ferrocord.png", dest = "/usr/share/icons/hicolor/64x64/apps/dev.ferrocord.Ferrocord.png", mode = "644" },
+    { source = "packaging/icons/hicolor/128x128/apps/dev.ferrocord.Ferrocord.png", dest = "/usr/share/icons/hicolor/128x128/apps/dev.ferrocord.Ferrocord.png", mode = "644" },
+    { source = "packaging/icons/hicolor/256x256/apps/dev.ferrocord.Ferrocord.png", dest = "/usr/share/icons/hicolor/256x256/apps/dev.ferrocord.Ferrocord.png", mode = "644" },
+    { source = "packaging/icons/hicolor/512x512/apps/dev.ferrocord.Ferrocord.png", dest = "/usr/share/icons/hicolor/512x512/apps/dev.ferrocord.Ferrocord.png", mode = "644" },
+    { source = "packaging/icons/hicolor/scalable/apps/dev.ferrocord.Ferrocord.svg", dest = "/usr/share/icons/hicolor/scalable/apps/dev.ferrocord.Ferrocord.svg", mode = "644" },
+    { source = "README.md", dest = "/usr/share/doc/ferrocord/README.md", mode = "644", doc = true },
+    { source = "LICENSE", dest = "/usr/share/licenses/ferrocord/LICENSE", mode = "644", doc = true },
+]
+
+# Linked libraries are detected automatically (auto-req). These are dlopen()ed by
+# winit/glutin, so they are declared by soname to stay distribution-neutral.
+[package.metadata.generate-rpm.requires]
+"libxkbcommon.so.0()(64bit)" = "*"
+"libxkbcommon-x11.so.0()(64bit)" = "*"
+"libEGL.so.1()(64bit)" = "*"
+"libGL.so.1()(64bit)" = "*"
+"libwayland-client.so.0()(64bit)" = "*"
+"libwayland-cursor.so.0()(64bit)" = "*"
+"libwayland-egl.so.1()(64bit)" = "*"
+"libX11.so.6()(64bit)" = "*"
+"libX11-xcb.so.1()(64bit)" = "*"
+"libXcursor.so.1()(64bit)" = "*"
+"libXrandr.so.2()(64bit)" = "*"
+"libXi.so.6()(64bit)" = "*"
+
+[package.metadata.generate-rpm.suggests]
+"gnome-keyring" = "*"

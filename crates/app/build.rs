@@ -26,8 +26,9 @@ fn main() {
 
 fn embed_windows_resources() {
     let version = env::var("CARGO_PKG_VERSION").unwrap_or_default();
+    let icon = std::path::Path::new(&env::var("CARGO_MANIFEST_DIR").unwrap_or_default()).join(ICON);
     let mut res = winresource::WindowsResource::new();
-    res.set_icon(ICON)
+    res.set_icon(&icon.to_string_lossy())
         .set_language(0x0409) // en-US
         .set("ProductName", "Ferrocord")
         .set("FileDescription", "Ferrocord")
@@ -38,7 +39,7 @@ fn embed_windows_resources() {
         .set("FileVersion", &version)
         .set("ProductVersion", &version);
 
-    if let Err(err) = res.compile_for(&["ferrocord"]) {
+    if let Err(err) = res.compile_for("ferrocord") {
         if env::var_os("FERROCORD_REQUIRE_WINRES").is_some_and(|v| !v.is_empty() && v != "0") {
             panic!("failed to embed Windows resources (icon, version info): {err}");
         }

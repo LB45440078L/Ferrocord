@@ -292,6 +292,59 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
             }
             Modal::Search { query, results, searching }
         }
+        Modal::IncomingCall { channel } => {
+            let (name, avatar) = {
+                let s = app.client.store();
+                let c = s.channels.get(&channel);
+                let avatar = c.and_then(|c| {
+                    if c.kind == ChannelType::Dm { c.recipient_ids().first().and_then(|u| s.user(*u).map(|u| u.avatar_url(160))) } else { c.icon_url(160) }
+                });
+                (
+                    c.map(|c| {
+                        if c.kind == ChannelType::Dm {
+                            c.recipient_ids().first().map(|u| s.display_name(None, *u)).unwrap_or_default()
+                        } else {
+                            c.display_name()
+                        }
+                    })
+                    .unwrap_or_default(),
+                    avatar,
+                )
+            };
+            let r = egui::Modal::new(egui::Id::unique("incoming_call")).frame(frame(app)).show(ctx, |ui| {
+                ui.set_width(300.0);
+                ui.vertical_centered(|ui| {
+                    if let Some(a) = &avatar {
+                        widgets::avatar(ui, &app.images, a, 96.0, None, &app.pal);
+                    }
+                    ui.add_space(8.0);
+                    ui.label(RichText::new(&name).font(FontId::new(18.0, theme::bold())));
+                    ui.label(RichText::new("Incoming call…").color(app.pal.text_muted));
+                    ui.add_space(14.0);
+                    ui.horizontal(|ui| {
+                        ui.add_space((ui.available_width() - 2.0 * 120.0 - 8.0).max(0.0) / 2.0);
+                        let decline =
+                            egui::Button::new(RichText::new("Decline").color(egui::Color32::WHITE).strong()).fill(app.pal.danger).min_size(vec2(120.0, 36.0));
+                        if ui.add(decline).clicked() {
+                            app.client.decline_call(channel);
+                            keep = false;
+                        }
+                        let accept = egui::Button::new(RichText::new("Join Call").color(egui::Color32::WHITE).strong())
+                            .fill(app.pal.success)
+                            .min_size(vec2(120.0, 36.0));
+                        if ui.add(accept).clicked() {
+                            app.client.join_voice(channel);
+                            app.select_channel(channel);
+                            keep = false;
+                        }
+                    });
+                });
+            });
+            if r.should_close() {
+                keep = false;
+            }
+            Modal::IncomingCall { channel }
+        }
         Modal::CustomStatus { mut text } => {
             let r = egui::Modal::new(egui::Id::unique("custom_status")).frame(frame(app)).show(ctx, |ui| {
                 ui.set_width(400.0);
