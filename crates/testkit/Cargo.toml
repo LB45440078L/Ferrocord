@@ -3,6 +3,7 @@ name = "ferrocord-testkit"
 description = "Mock Discord (REST, gateway, remote auth) and payload fixtures for Ferrocord integration tests"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false

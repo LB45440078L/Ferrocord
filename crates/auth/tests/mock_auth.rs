@@ -264,7 +264,7 @@ async fn qr_fingerprint_mismatch_is_rejected() {
 #[tokio::test]
 async fn qr_heartbeats_are_acked() {
     let (mock, http) = setup().await;
-    mock.remote_auth().set_heartbeat_interval(40);
+    mock.remote_auth().set_heartbeat_interval(250);
     mock.remote_auth().script([RemoteAuthBehaviour::Idle]);
     let mut rx = remote::start_with_url(http, mock.remote_auth_url());
     expect_qr(&mut rx).await;

@@ -3,6 +3,7 @@ name = "ferrocord"
 description = "Ferrocord — a fast, open-source Discord client written in Rust"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 default-run = "ferrocord"

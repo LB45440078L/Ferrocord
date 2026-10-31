@@ -3,6 +3,7 @@ name = "ferrocord-gateway"
 description = "Discord gateway connection: zlib-stream transport, heartbeating, resume and reconnect"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 

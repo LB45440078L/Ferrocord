@@ -3,6 +3,7 @@ name = "ferrocord-media"
 description = "Video media layer for Ferrocord: camera capture, H.264 encode/decode and RFC 6184 RTP packetization"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 

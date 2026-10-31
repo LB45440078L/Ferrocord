@@ -3,6 +3,7 @@ name = "ferrocord-model"
 description = "Wire types for the Discord user API (REST + gateway) used by Ferrocord"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 

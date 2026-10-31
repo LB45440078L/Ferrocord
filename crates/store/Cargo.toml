@@ -3,6 +3,7 @@ name = "ferrocord-store"
 description = "Normalized in-memory cache of Discord state, updated from gateway events"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 

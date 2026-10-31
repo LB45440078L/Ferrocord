@@ -3,6 +3,7 @@ name = "ferrocord-http"
 description = "Discord REST client with client fingerprinting, rate limiting and captcha/MFA hooks"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 

@@ -3,6 +3,7 @@ name = "ferrocord-voice"
 description = "Discord voice & video: voice gateway v9, UDP/RTP transport encryption, DAVE E2EE, Opus audio engine"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 

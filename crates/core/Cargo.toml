@@ -3,6 +3,7 @@ name = "ferrocord-core"
 description = "Ferrocord client orchestrator: session lifecycle, actions, events and the extension interface"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 

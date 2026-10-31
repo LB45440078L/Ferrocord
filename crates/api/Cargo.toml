@@ -3,6 +3,7 @@ name = "ferrocord-api"
 description = "Local HTTP + WebSocket control API for Ferrocord"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 

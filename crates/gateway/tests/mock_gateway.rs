@@ -177,7 +177,10 @@ async fn malformed_and_unknown_dispatches_degrade_to_other() {
 #[tokio::test]
 async fn heartbeats_report_latency_and_sequence() {
     let mock = MockDiscord::start().await;
-    mock.gateway().set_heartbeat_interval(40);
+    // Short enough to see three beats quickly, long enough that a slow CI runner
+    // still delivers each ACK before the next beat (a missed ACK means "zombie,
+    // resume", which would add a RESUMED dispatch and a second connection).
+    mock.gateway().set_heartbeat_interval(250);
     let mut c = Client::start(&mock);
     c.ready().await;
     c.dispatch("READY_SUPPLEMENTAL").await;

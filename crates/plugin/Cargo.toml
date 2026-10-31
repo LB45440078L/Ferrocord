@@ -3,6 +3,7 @@ name = "ferrocord-plugin"
 description = "Sandboxed Luau plugin runtime for Ferrocord"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 

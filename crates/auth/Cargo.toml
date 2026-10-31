@@ -3,6 +3,7 @@ name = "ferrocord-auth"
 description = "Discord account login: password, MFA (TOTP/SMS/backup), QR remote auth and secure token storage"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
