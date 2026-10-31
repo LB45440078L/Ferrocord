@@ -58,6 +58,8 @@ pub struct Integrations {
     pub profiles: Arc<Mutex<HashMap<Snowflake, Option<UserProfile>>>>,
     /// Per-user voice volume chosen in this session.
     volumes: HashMap<Snowflake, f32>,
+    /// Uploaded video textures per user, with the frame timestamp they show.
+    video_textures: HashMap<Snowflake, (std::time::Instant, egui::TextureHandle)>,
 }
 
 impl Integrations {
@@ -89,6 +91,7 @@ impl Integrations {
             search_rx,
             profiles: Arc::default(),
             volumes: HashMap::new(),
+            video_textures: HashMap::new(),
         };
         if demo {
             this.rescan();
@@ -139,16 +142,37 @@ impl Integrations {
         self.volumes.insert(user, volume);
     }
 
-    /// Latest decoded camera frame for a call participant, as a texture.
-    pub fn video_frame(&self, _user: Snowflake) -> Option<crate::images::Img> {
-        None
+    /// Latest camera frame of a call participant (our own preview for `me`), as a texture.
+    pub fn video_frame(&mut self, ctx: &egui::Context, client: &Client, user: Snowflake) -> Option<crate::images::Img> {
+        let shared = client.voice_shared()?;
+        let frame = if user == client.store().my_id() { shared.local_video.read().clone() } else { shared.remote_video.read().get(&user.0).cloned() };
+        let Some(frame) = frame else {
+            self.video_textures.remove(&user);
+            return None;
+        };
+        let size = egui::vec2(frame.width as f32, frame.height as f32);
+        let stale = self.video_textures.get(&user).is_none_or(|(ts, _)| *ts != frame.timestamp);
+        if stale {
+            let img = egui::ColorImage::from_rgba_unmultiplied([frame.width as usize, frame.height as usize], &frame.data);
+            match self.video_textures.get_mut(&user) {
+                Some((ts, tex)) => {
+                    tex.set(img, egui::TextureOptions::LINEAR);
+                    *ts = frame.timestamp;
+                }
+                None => {
+                    let tex = ctx.load_texture(format!("video-{user}"), img, egui::TextureOptions::LINEAR);
+                    self.video_textures.insert(user, (frame.timestamp, tex));
+                }
+            }
+        }
+        // Video plays continuously; keep frames flowing while tiles are visible.
+        ctx.request_repaint_after(std::time::Duration::from_millis(33));
+        self.video_textures.get(&user).map(|(_, t)| crate::images::Img { texture: t.id(), size })
     }
 
     pub fn toggle_camera(&mut self, client: &Client) -> Result<(), String> {
-        if client.voice_channel().is_none() {
-            return Err("Join a call first".into());
-        }
-        Err("Camera support is not available in this build".into())
+        let on = client.voice_status().is_some_and(|s| s.self_video);
+        client.set_video(!on)
     }
 
     // ------------------------------------------------------------ plugins

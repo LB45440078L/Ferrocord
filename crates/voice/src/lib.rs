@@ -16,6 +16,9 @@ pub mod dave;
 pub mod protocol;
 pub mod rtp;
 pub mod udp;
+pub mod video;
 
 pub use audio::{DeviceConfig, list_devices};
 pub use connection::{AudioIo, ConnectInfo, Shared, VoiceConnection, VoiceEvent, VoiceSettings, VoiceState};
+pub use ferrocord_media::{VideoFrame, camera::list_cameras};
+pub use video::VideoSource;

@@ -221,7 +221,8 @@ pub fn call_view(app: &mut App, ui: &mut Ui, channel: Snowflake) {
             let tr = Rect::from_min_size(origin + vec2(row_offset + c as f32 * (tile.x + 12.0), r as f32 * (tile.y + 12.0)), tile);
             let speaking = is_speaking(app, channel, *user);
             ui.painter().rect_filled(tr, CornerRadius::same(10), pal.bg_elevated);
-            let frame = app.ext.video_frame(*user);
+            let ctx = ui.ctx().clone();
+            let frame = if joined { app.ext.video_frame(&ctx, &app.client, *user) } else { None };
             if let Some(tex) = frame {
                 let fitted = Rect::from_center_size(tr.center(), fit(tex.size, tr.size()));
                 egui::Image::from_texture(egui::load::SizedTexture::new(tex.texture, fitted.size())).corner_radius(CornerRadius::same(10)).paint_at(ui, fitted);

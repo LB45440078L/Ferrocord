@@ -79,6 +79,8 @@ struct Server {
     relayed_packets: u64,
     /// Relayed payloads that carry the DAVE frame trailer (end with magic 0xFAFA).
     dave_frames: u64,
+    video_packets: u64,
+    video_announcements: u64,
 }
 
 impl Server {
@@ -138,6 +140,7 @@ impl MockVoice {
                         let Ok((h, payload)) = sender.cipher.decrypt_rtp(pkt) else { continue };
                         let sender_ssrc = sender.ssrc;
                         let is_dave = payload.ends_with(&[0xFA, 0xFA]);
+                        let is_video = h.payload_type == ferrocord_voice::protocol::H264_PAYLOAD_TYPE;
                         for c in s.clients.values_mut().filter(|c| c.ssrc != sender_ssrc) {
                             let Some(addr) = c.udp_addr else { continue };
                             let mut fwd = vec![];
@@ -148,6 +151,9 @@ impl MockVoice {
                             }
                         }
                         s.relayed_packets += 1;
+                        if is_video {
+                            s.video_packets += 1;
+                        }
                         if is_dave {
                             s.dave_frames += 1;
                         }
@@ -209,7 +215,7 @@ async fn serve_client(tcp: tokio::net::TcpStream, server: Arc<Mutex<Server>>, es
                         s.send_json(
                             user,
                             op::READY,
-                            json!({ "ssrc": ssrc, "ip": "127.0.0.1", "port": udp_port, "modes": ["xsalsa20_poly1305", MODE], "streams": [] }),
+                            json!({ "ssrc": ssrc, "ip": "127.0.0.1", "port": udp_port, "modes": ["xsalsa20_poly1305", MODE], "streams": [{ "type": "video", "rid": "100", "ssrc": ssrc + 100, "rtx_ssrc": ssrc + 200, "quality": 100, "active": false }] }),
                         );
                         // Tell everyone who is in the call.
                         let all: Vec<u64> = s.order.clone();
@@ -241,6 +247,17 @@ async fn serve_client(tcp: tokio::net::TcpStream, server: Arc<Mutex<Server>>, es
                         let others: Vec<u64> = s.order.iter().copied().filter(|u| *u != user).collect();
                         for o in others {
                             s.send_json(o, op::SPEAKING, json!({ "user_id": user.to_string(), "ssrc": d["ssrc"], "speaking": d["speaking"] }));
+                        }
+                    }
+                    op::VIDEO => {
+                        let user = me.unwrap();
+                        let mut s = server.lock();
+                        s.video_announcements += 1;
+                        let others: Vec<u64> = s.order.iter().copied().filter(|u| *u != user).collect();
+                        for o in others {
+                            let mut v = d.clone();
+                            v["user_id"] = json!(user.to_string());
+                            s.send_json(o, op::VIDEO, v);
                         }
                     }
                     op::DAVE_TRANSITION_READY => {
@@ -396,4 +413,69 @@ async fn muted_client_sends_nothing() {
     assert_eq!(mock.server.lock().relayed_packets, 0, "muted client must not transmit audio");
     assert!(!*a.shared.self_speaking.read());
     a.disconnect();
+}
+
+fn gradient(i: u32) -> ferrocord_voice::VideoFrame {
+    let (w, h) = (640u32, 360u32);
+    let mut data = Vec::with_capacity((w * h * 4) as usize);
+    for y in 0..h {
+        for x in 0..w {
+            data.extend_from_slice(&[((x + i * 8) % 256) as u8, ((y + i * 4) % 256) as u8, 128, 255]);
+        }
+    }
+    ferrocord_voice::VideoFrame::new(w, h, data).unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn camera_video_reaches_the_other_client() {
+    let mock = MockVoice::start().await;
+    let endpoint = format!("ws://{}", mock.ws_addr);
+    let info = |user: u64| ConnectInfo {
+        endpoint: endpoint.clone(),
+        server_id: 1,
+        channel_id: CHANNEL,
+        user_id: user,
+        session_id: format!("s{user}"),
+        token: "tok".into(),
+    };
+    let (_a_cap, a_rx) = mpsc::channel(4);
+    let a = VoiceConnection::connect(info(501), VoiceSettings::default(), AudioIo::Custom { capture: a_rx, playback: Arc::default() });
+    assert!(wait_for(|| a.state() == VoiceState::Connected, 10).await);
+    let (_b_cap, b_rx) = mpsc::channel(4);
+    let b = VoiceConnection::connect(info(502), VoiceSettings::default(), AudioIo::Custom { capture: b_rx, playback: Arc::default() });
+    assert!(wait_for(|| b.state() == VoiceState::Connected, 10).await);
+    assert!(
+        wait_for(|| a.shared.privacy_code.read().is_some() && *a.shared.privacy_code.read() == *b.shared.privacy_code.read(), 10).await,
+        "DAVE group should form"
+    );
+
+    // A turns on a synthetic "camera".
+    let (frames_tx, frames_rx) = mpsc::channel(8);
+    a.set_video(Some(ferrocord_voice::VideoSource::Custom(frames_rx)));
+    let feeder = tokio::spawn(async move {
+        for i in 0..150 {
+            if frames_tx.send(gradient(i)).await.is_err() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(33)).await;
+        }
+    });
+    assert!(wait_for(|| *a.shared.video_enabled.read(), 5).await, "video should start");
+    assert!(wait_for(|| mock.server.lock().video_announcements > 0, 5).await, "op 12 should be sent");
+    let got = wait_for(|| b.shared.remote_video.read().contains_key(&501), 15).await;
+    {
+        let s = mock.server.lock();
+        assert!(got, "B should decode A's video (video packets relayed: {})", s.video_packets);
+        assert!(s.dave_frames > 0);
+    }
+    let frame = b.shared.remote_video.read().get(&501).cloned().unwrap();
+    assert_eq!((frame.width, frame.height), (1280, 720), "encoder sends 720p");
+    assert!(a.shared.local_video.read().is_some(), "local preview should be available");
+
+    // Turning the camera off clears the remote tile.
+    a.set_video(None);
+    assert!(wait_for(|| !b.shared.remote_video.read().contains_key(&501), 5).await, "B should drop A's tile when the camera stops");
+    feeder.abort();
+    a.disconnect();
+    b.disconnect();
 }

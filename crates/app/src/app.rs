@@ -111,6 +111,8 @@ pub struct App {
     pub demo: bool,
     /// Cached audio device names (inputs, outputs) for settings.
     pub audio_devices: Option<(Vec<String>, Vec<String>)>,
+    /// Cached cameras (index, name) for settings.
+    pub cameras: Option<Vec<(u32, String)>>,
     window_focused: bool,
     last_title: String,
 }
@@ -160,6 +162,7 @@ impl App {
             ext,
             demo,
             audio_devices: None,
+            cameras: None,
             window_focused: true,
             last_title: String::new(),
         };

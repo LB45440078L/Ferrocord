@@ -104,6 +104,21 @@ impl Client {
         self.emit_voice_status();
     }
 
+    /// Turns our camera on or off in the current call.
+    pub fn set_video(&self, on: bool) -> Result<(), String> {
+        let camera = self.config().voice.camera.unwrap_or(0);
+        let active = self.voice_manager().active.lock().as_ref().map(|a| (a.guild, a.channel, a.conn.clone()));
+        let Some((guild, channel, Some(conn))) = active else { return Err("Join a call first".into()) };
+        if on && ferrocord_voice::list_cameras().is_empty() {
+            return Err("No camera found".into());
+        }
+        conn.set_video(on.then_some(ferrocord_voice::VideoSource::Camera(camera)));
+        *self.voice_manager().self_video.lock() = on;
+        self.send_voice_state(guild, Some(channel));
+        self.emit_voice_status();
+        Ok(())
+    }
+
     /// Declines an incoming DM call.
     pub fn decline_call(&self, channel: Snowflake) {
         let me = self.store().my_id();
@@ -176,7 +191,7 @@ impl Client {
             ping_ms: shared.as_ref().and_then(|s| *s.ping_ms.read()),
             self_mute: *vm.self_mute.lock(),
             self_deaf: *vm.self_deaf.lock(),
-            self_video: *vm.self_video.lock(),
+            self_video: shared.as_ref().map(|s| *s.video_enabled.read()).unwrap_or(*vm.self_video.lock()),
             e2ee: shared.as_ref().is_some_and(|s| *s.dave_version.read() > 0),
             privacy_code: shared.as_ref().and_then(|s| s.privacy_code.read().clone()),
             error: shared.as_ref().and_then(|s| s.last_error.read().clone()),

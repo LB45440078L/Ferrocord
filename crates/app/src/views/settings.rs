@@ -303,8 +303,30 @@ fn voice(app: &mut App, ui: &mut Ui) {
         widgets::section_label(ui, "Output device", &pal);
         changed |= device_combo(ui, "output_dev", &mut cfg.output_device, &outputs);
         ui.add_space(6.0);
+        ui.add_space(8.0);
+        widgets::section_label(ui, "Camera", &pal);
+        if app.cameras.is_none() {
+            app.cameras = Some(ferrocord_core::voice_engine::list_cameras().into_iter().map(|c| (c.index, c.name)).collect());
+        }
+        let cams = app.cameras.clone().unwrap_or_default();
+        if cams.is_empty() {
+            ui.label(RichText::new("No camera detected.").color(pal.text_faint));
+        } else {
+            let current = cfg.camera.unwrap_or(0);
+            let label = cams.iter().find(|c| c.0 == current).map(|c| c.1.clone()).unwrap_or_else(|| cams[0].1.clone());
+            egui::ComboBox::from_id_salt("camera_dev").width(ui.available_width().min(420.0)).selected_text(label).show_ui(ui, |ui| {
+                for (i, name) in &cams {
+                    if ui.selectable_label(current == *i, name).clicked() {
+                        cfg.camera = Some(*i);
+                        changed = true;
+                    }
+                }
+            });
+        }
+        ui.add_space(6.0);
         if ui.button("Refresh devices").clicked() {
             app.audio_devices = None;
+            app.cameras = None;
         }
         ui.label(RichText::new("Device changes apply the next time you join a call.").size(12.5).color(pal.text_faint));
     });

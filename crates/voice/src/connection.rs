@@ -94,6 +94,15 @@ pub struct Shared {
     pub dave_version: RwLock<u16>,
     pub privacy_code: RwLock<Option<String>>,
     pub last_error: RwLock<Option<String>>,
+    /// Latest decoded camera frame per remote user.
+    pub remote_video: RwLock<HashMap<u64, ferrocord_media::VideoFrame>>,
+    /// Our own camera preview while video is on.
+    pub local_video: RwLock<Option<ferrocord_media::VideoFrame>>,
+    /// Remote video SSRC → user (from op 12).
+    pub video_ssrc_user: RwLock<HashMap<u32, u64>>,
+    /// Set when someone asked us (RTCP PLI) for a fresh keyframe.
+    pub keyframe_requested: std::sync::atomic::AtomicBool,
+    pub video_enabled: RwLock<bool>,
 }
 
 impl Shared {
@@ -106,6 +115,7 @@ impl Shared {
 enum Cmd {
     Disconnect,
     Ws(Outgoing),
+    SetVideo(Option<crate::video::VideoSource>),
 }
 
 /// Handle to a running connection. Dropping it does not disconnect; call [`VoiceConnection::disconnect`].
@@ -153,6 +163,11 @@ impl VoiceConnection {
         f(&mut self.shared.settings.write());
     }
 
+    /// Turns our camera on (with the given source) or off.
+    pub fn set_video(&self, source: Option<crate::video::VideoSource>) {
+        let _ = self.cmd.send(Cmd::SetVideo(source));
+    }
+
     pub fn disconnect(&self) {
         let _ = self.cmd.send(Cmd::Disconnect);
     }
@@ -164,10 +179,12 @@ fn set_state(shared: &Shared, events: &broadcast::Sender<VoiceEvent>, s: VoiceSt
 }
 
 /// Media state shared by the gateway, sender and receiver tasks.
-struct Media {
-    cipher: Option<TransportCipher>,
-    dave: Dave,
-    ssrc: u32,
+pub(crate) struct Media {
+    pub(crate) cipher: Option<TransportCipher>,
+    pub(crate) dave: Dave,
+    pub(crate) ssrc: u32,
+    pub(crate) video_ssrc: u32,
+    pub(crate) rtx_ssrc: u32,
 }
 
 fn ws_url(endpoint: &str) -> String {
@@ -196,8 +213,10 @@ async fn run(
     cmd_tx: mpsc::UnboundedSender<Cmd>,
 ) {
     set_state(&shared, &events, VoiceState::Connecting);
-    let media = Arc::new(Mutex::new(Media { cipher: None, dave: Dave::new(info.user_id, info.channel_id), ssrc: 0 }));
+    let media = Arc::new(Mutex::new(Media { cipher: None, dave: Dave::new(info.user_id, info.channel_id), ssrc: 0, video_ssrc: 0, rtx_ssrc: 0 }));
     let mut tasks: Vec<tokio::task::JoinHandle<()>> = vec![];
+    let mut video_sender: Option<crate::video::VideoSender> = None;
+    let mut udp_socket: Option<Arc<UdpSocket>> = None;
     let mut _devices: Option<DeviceAudio> = None;
     let mut audio_io = Some(audio_io);
     let mut seq_ack: i64 = -1;
@@ -244,7 +263,7 @@ async fn run(
                 session_id: info.session_id.clone(),
                 token: info.token.clone(),
                 max_dave_protocol_version: protocol::MAX_DAVE_PROTOCOL_VERSION,
-                video: false,
+                video: true,
                 streams: vec![protocol::StreamDescriptor::camera()],
             };
             let _ = sink.send(frame(op::IDENTIFY, serde_json::to_value(id).unwrap_or_default())).await;
@@ -280,6 +299,23 @@ async fn run(
                     Some(Cmd::Ws(o)) => {
                         let _ = sink.send(outgoing_msg(o)).await;
                     }
+                    Some(Cmd::SetVideo(source)) => {
+                        // Dropping the sender stops the camera and encoder thread.
+                        drop(video_sender.take());
+                        let (audio_ssrc, video_ssrc, rtx_ssrc) = { let m = media.lock(); (m.ssrc, m.video_ssrc, m.rtx_ssrc) };
+                        let mut active = false;
+                        if let (Some(src), Some(sock)) = (source, udp_socket.clone().or_else(|| udp.clone())) {
+                            match crate::video::VideoSender::start(src, sock, media.clone(), shared.clone()) {
+                                Ok(v) => { video_sender = Some(v); active = true; }
+                                Err(e) => fail(&shared, &events, format!("camera unavailable: {e}")),
+                            }
+                        }
+                        *shared.video_enabled.write() = active;
+                        if !active { *shared.local_video.write() = None; }
+                        let streams = vec![crate::video::stream_descriptor(video_ssrc, rtx_ssrc, active)];
+                        let v = json!({ "audio_ssrc": audio_ssrc, "video_ssrc": if active { video_ssrc } else { 0 }, "rtx_ssrc": if active { rtx_ssrc } else { 0 }, "streams": streams });
+                        let _ = sink.send(frame(op::VIDEO, v)).await;
+                    }
                 },
                 msg = stream.next() => {
                     let msg = match msg {
@@ -314,6 +350,9 @@ async fn run(
                         _ => continue,
                     };
                     let replies = handle(opcode, d, binary, &shared, &events, &media, &mut udp, &mut tasks, &mut audio_io, &mut _devices, &cmd_tx, &mut heartbeat, &mut awaiting_ack, &mut resumable).await;
+                    if udp.is_some() {
+                        udp_socket = udp.clone();
+                    }
                     for r in replies {
                         let _ = sink.send(r).await;
                     }
@@ -327,6 +366,7 @@ async fn run(
         }
     }
 
+    drop(video_sender.take());
     for t in tasks {
         t.abort();
     }
@@ -389,7 +429,14 @@ async fn handle(
         op::HEARTBEAT => out.push(frame(op::HEARTBEAT, json!({ "t": now_ms() }))),
         op::READY => {
             let Ok(ready) = serde_json::from_value::<protocol::Ready>(d) else { return out };
-            media.lock().ssrc = ready.ssrc;
+            {
+                let mut m = media.lock();
+                m.ssrc = ready.ssrc;
+                if let Some(v) = ready.streams.iter().find(|s| s.kind == "video") {
+                    m.video_ssrc = v.ssrc.unwrap_or(0);
+                    m.rtx_ssrc = v.rtx_ssrc.unwrap_or(0);
+                }
+            }
             let Some(mode) = choose_mode(&ready.modes) else {
                 fail(shared, events, format!("no supported encryption mode in {:?}", ready.modes));
                 return out;
@@ -407,13 +454,14 @@ async fn handle(
             match crate::udp::connect_and_discover(addr, ready.ssrc).await {
                 Ok((sock, ip, port)) => {
                     *udp = Some(Arc::new(sock));
+
                     let sel = protocol::SelectProtocol {
                         protocol: "udp".into(),
                         data: protocol::SelectProtocolData { address: ip.clone(), port, mode: mode.into() },
                         address: ip,
                         port,
                         mode: mode.into(),
-                        codecs: protocol::codecs(false),
+                        codecs: protocol::codecs(true),
                         rtc_connection_id: uuid_v4(),
                         experiments: vec![],
                     };
@@ -442,6 +490,8 @@ async fn handle(
                         start_media(sock, shared.clone(), media.clone(), audio_io, devices, cmd_tx.clone(), tasks);
                     }
                     *resumable = true;
+                    // Ask the SFU to forward everyone's video at full quality.
+                    out.push(frame(op::MEDIA_SINK_WANTS, json!({ "any": 100 })));
                     set_state(shared, events, VoiceState::Connected);
                 }
                 Err(e) => fail(shared, events, format!("encryption setup failed: {e}")),
@@ -458,6 +508,14 @@ async fn handle(
             if let Some(user) = d.get("user_id").and_then(protocol::snowflake) {
                 if let Some(a) = d.get("audio_ssrc").and_then(Value::as_u64).filter(|a| *a != 0) {
                     shared.ssrc_user.write().insert(a as u32, user);
+                }
+                let video = d.get("video_ssrc").and_then(Value::as_u64).unwrap_or(0) as u32;
+                let mut map = shared.video_ssrc_user.write();
+                map.retain(|_, u| *u != user);
+                if video != 0 {
+                    map.insert(video, user);
+                } else {
+                    shared.remote_video.write().remove(&user);
                 }
                 shared.users.write().insert(user);
             }
@@ -572,7 +630,8 @@ fn start_media(
     };
     let mixer = Arc::new(Mutex::new(Mixer::default()));
     tasks.push(tokio::spawn(send_loop(sock.clone(), shared.clone(), media.clone(), capture_rx, cmd_tx.clone())));
-    tasks.push(tokio::spawn(recv_loop(sock, shared.clone(), media, mixer.clone(), cmd_tx)));
+    let video_rx = crate::video::start_receiver(sock.clone(), media.clone(), shared.clone());
+    tasks.push(tokio::spawn(recv_loop(sock, shared.clone(), media, mixer.clone(), cmd_tx, video_rx)));
     tasks.push(tokio::spawn(mix_loop(shared, mixer, ring)));
 }
 
@@ -647,7 +706,14 @@ async fn send_loop(
     }
 }
 
-async fn recv_loop(sock: Arc<UdpSocket>, shared: Arc<Shared>, media: Arc<Mutex<Media>>, mixer: Arc<Mutex<Mixer>>, cmd_tx: mpsc::UnboundedSender<Cmd>) {
+async fn recv_loop(
+    sock: Arc<UdpSocket>,
+    shared: Arc<Shared>,
+    media: Arc<Mutex<Media>>,
+    mixer: Arc<Mutex<Mixer>>,
+    cmd_tx: mpsc::UnboundedSender<Cmd>,
+    video_tx: std::sync::mpsc::Sender<crate::video::VideoPacket>,
+) {
     let mut buf = vec![0u8; 2048];
     loop {
         let n = match sock.recv(&mut buf).await {
@@ -660,10 +726,31 @@ async fn recv_loop(sock: Arc<UdpSocket>, shared: Arc<Shared>, media: Arc<Mutex<M
         };
         let pkt = &buf[..n];
         if is_rtcp(pkt) {
-            continue; // Keyframe requests are handled by the video pipeline.
+            let m = media.lock();
+            if let Some(Ok(plain)) = m.cipher.as_ref().map(|c| c.decrypt_rtcp(pkt))
+                && m.video_ssrc != 0
+                && crate::rtp::keyframe_requests(&plain).contains(&m.video_ssrc)
+            {
+                shared.keyframe_requested.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+            continue;
         }
         let mut m = media.lock();
         let Some(Ok((header, payload))) = m.cipher.as_ref().map(|c| c.decrypt_rtp(pkt)) else { continue };
+        if header.payload_type == protocol::H264_PAYLOAD_TYPE {
+            drop(m);
+            if let Some(user) = shared.video_ssrc_user.read().get(&header.ssrc).copied() {
+                let _ = video_tx.send(crate::video::VideoPacket {
+                    ssrc: header.ssrc,
+                    user,
+                    seq: header.sequence,
+                    timestamp: header.timestamp,
+                    marker: header.marker,
+                    payload,
+                });
+            }
+            continue;
+        }
         if header.payload_type != protocol::OPUS_PAYLOAD_TYPE {
             continue;
         }
