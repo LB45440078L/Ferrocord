@@ -13,3 +13,6 @@ bitflags.workspace = true
 chrono.workspace = true
 prost.workspace = true
 base64.workspace = true
+
+[dev-dependencies]
+ferrocord-testkit.workspace = true

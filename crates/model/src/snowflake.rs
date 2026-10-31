@@ -36,9 +36,23 @@ impl Snowflake {
 
     /// Generates a nonce in snowflake format for "now", as the official client does
     /// for message nonces.
+    ///
+    /// Nonces are strictly increasing within the process: two messages sent in the
+    /// same millisecond must not share a nonce, or the server (with
+    /// `enforce_nonce`) would treat the second as a duplicate and drop it.
     pub fn nonce_now() -> Self {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static LAST: AtomicU64 = AtomicU64::new(0);
         let now = chrono::Utc::now().timestamp_millis() as u64;
-        Self((now.saturating_sub(DISCORD_EPOCH)) << 22)
+        let candidate = (now.saturating_sub(DISCORD_EPOCH)) << 22;
+        let mut last = LAST.load(Ordering::Relaxed);
+        loop {
+            let next = candidate.max(last + 1);
+            match LAST.compare_exchange_weak(last, next, Ordering::Relaxed, Ordering::Relaxed) {
+                Ok(_) => return Self(next),
+                Err(actual) => last = actual,
+            }
+        }
     }
 
     /// Smallest snowflake minted at the given unix-ms time (useful for search ranges).

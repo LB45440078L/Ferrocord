@@ -271,6 +271,16 @@ impl Http {
         Ok(v.get("threads").and_then(|t| serde_json::from_value(t.clone()).ok()).unwrap_or_default())
     }
 
+    /// Rings the other members of a DM/group DM (`recipients: None` rings everyone).
+    pub async fn ring(&self, channel: Snowflake, recipients: Option<&[Snowflake]>) -> R<()> {
+        self.send_unit(Request::post(format!("/channels/{channel}/call/ring")).json(json!({ "recipients": recipients }))).await
+    }
+
+    /// Stops ringing (declines an incoming call) for the given users, or ourselves.
+    pub async fn stop_ringing(&self, channel: Snowflake, recipients: Option<&[Snowflake]>) -> R<()> {
+        self.send_unit(Request::post(format!("/channels/{channel}/call/stop-ringing")).json(json!({ "recipients": recipients }))).await
+    }
+
     pub async fn join_thread(&self, thread: Snowflake) -> R<()> {
         self.send_unit(Request::put(format!("/channels/{thread}/thread-members/@me")).query("location", "Sidebar Overflow")).await
     }

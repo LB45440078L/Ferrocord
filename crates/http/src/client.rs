@@ -153,7 +153,9 @@ impl Request {
     }
     /// Audit log reason for moderation actions.
     pub fn reason(self, reason: &str) -> Self {
-        let enc = url::form_urlencoded::byte_serialize(reason.as_bytes()).collect::<String>();
+        // Percent-encode like encodeURIComponent: form encoding would turn spaces into '+',
+        // which Discord shows literally in the audit log.
+        let enc = url::form_urlencoded::byte_serialize(reason.as_bytes()).collect::<String>().replace('+', "%20");
         self.header("X-Audit-Log-Reason", enc)
     }
 }
