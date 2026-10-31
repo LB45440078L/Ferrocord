@@ -31,6 +31,9 @@
   <string>@MIN_MACOS@</string>
   <key>NSHighResolutionCapable</key>
   <true/>
+  <!-- Stay on the integrated GPU on dual-GPU Macs; the UI does not need the discrete one. -->
+  <key>NSSupportsAutomaticGraphicsSwitching</key>
+  <true/>
   <key>NSHumanReadableCopyright</key>
   <string>Copyright (c) Ferrocord contributors. BSD-3-Clause license.</string>
   <key>NSCameraUsageDescription</key>

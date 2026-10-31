@@ -1,0 +1,32 @@
+cask "ferrocord" do
+  arch arm: "arm64", intel: "x86_64"
+
+  version "@VERSION@"
+  sha256 arm:   "@SHA256_ARM64@",
+         intel: "@SHA256_X86_64@"
+
+  url "https://github.com/@REPOSITORY@/releases/download/v#{version}/ferrocord-#{version}-macos-#{arch}.dmg"
+  name "Ferrocord"
+  desc "Fast, open-source Discord client"
+  homepage "https://github.com/@REPOSITORY@"
+
+  livecheck do
+    url :url
+    strategy :github_latest
+  end
+
+  depends_on macos: ">= :monterey"
+
+  app "Ferrocord.app"
+  binary "#{appdir}/Ferrocord.app/Contents/MacOS/ferrocord"
+
+  # Account tokens live in the login Keychain (service "dev.ferrocord.client"); remove them
+  # with Keychain Access, or run `ferrocord --remove-user-data` before uninstalling.
+  zap trash: [
+    "~/Library/Application Support/dev.ferrocord.Ferrocord",
+    "~/Library/Caches/dev.ferrocord.Ferrocord",
+    "~/Library/Logs/Ferrocord",
+    "~/Library/Preferences/dev.ferrocord.Ferrocord.plist",
+    "~/Library/Saved Application State/dev.ferrocord.Ferrocord.savedState",
+  ]
+@CAVEATS@end

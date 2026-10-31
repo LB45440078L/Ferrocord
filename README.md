@@ -56,15 +56,15 @@ Download the file for your system from the
 
 | System | Download |
 |---|---|
-| Windows 10/11 (x64 or ARM64) | `…-windows-<arch>-setup.exe` (per-user installer, no admin rights) or the portable `.zip` |
+| Windows 10/11 (x64 or ARM64) | `…-windows-<arch>.msi` (installs for you, or for all users via *Advanced*) or the portable `.zip`; or `winget install Ferrocord.Ferrocord` |
 | Debian, Ubuntu (amd64 or arm64) | `ferrocord_<version>-1_<arch>.deb`: `sudo apt install ./ferrocord_*.deb` |
 | Fedora, openSUSE (x86_64 or aarch64) | `ferrocord-<version>-1.<arch>.rpm`: `sudo dnf install ./ferrocord-*.rpm` |
 | Any Linux | `.AppImage` (`chmod +x` and run) or the `.tar.gz` |
-| macOS 12+ (Apple Silicon and Intel) | `…-macos-universal.dmg` |
+| macOS 12+ | `…-macos-arm64.dmg` (Apple Silicon) or `…-macos-x86_64.dmg` (Intel); or `brew install --cask ferrocord/tap/ferrocord` |
 
-Release builds are not code-signed yet: Windows SmartScreen may ask you to
-confirm, and on macOS you need to right-click the app and choose *Open* the
-first time. Every release lists SHA-256 checksums and build provenance
+Until release builds are code-signed, Windows SmartScreen may ask you to confirm,
+and on macOS you approve the first launch in *System Settings > Privacy &
+Security*. Every release lists SHA-256 checksums and build provenance
 attestations. See [docs/USAGE.md](docs/USAGE.md#installing) for details.
 
 ## Quick start

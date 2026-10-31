@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Ferrocord Windows Installer package (WiX Toolset 5).
+
+  Built by packaging/windows/package.ps1, which passes:
+    -d Version=1.2.3        numeric MSI ProductVersion (pre-release suffix stripped)
+    -d DisplayVersion=...   full SemVer shown in Apps & Features
+    -d SourceDir=...        folder holding ferrocord.exe and LICENSE.txt
+    -d ArtDir=...           folder holding banner.bmp, dialog.bmp, license.rtf
+    -d IconFile=...         ferrocord.ico
+    -arch x64 | arm64
+
+  One package serves both install scopes (ALLUSERS=2 + MSIINSTALLPERUSER=1):
+  the default is a per-user install into %LOCALAPPDATA%\Programs\Ferrocord with
+  no UAC prompt; choosing "Install for all users" elevates and installs into
+  %ProgramFiles%\Ferrocord. Silent installs follow the same rule:
+    msiexec /i ferrocord.msi /qn                       per-user
+    msiexec /i ferrocord.msi /qn ALLUSERS=1            per-machine
+  Optional properties: DESKTOPSHORTCUT=0 skips the desktop shortcut.
+
+  The UpgradeCode must never change: it is how new versions find and replace
+  old ones (MajorUpgrade).
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+
+  <Package Name="Ferrocord"
+           Manufacturer="Ferrocord Contributors"
+           Version="$(var.Version)"
+           UpgradeCode="6F2B9C4E-3A1D-4E7B-9F0C-2D8E5A7B1C93"
+           Scope="perUserOrMachine"
+           Compressed="yes"
+           Language="1033">
+
+    <SummaryInformation Description="Ferrocord $(var.DisplayVersion) installer" Keywords="Ferrocord, Discord, chat, installer" />
+
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  Schedule="afterInstallInitialize"
+                  DowngradeErrorMessage="A newer version of Ferrocord is already installed. Uninstall it first to install this one." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <!-- Apps & Features entry -->
+    <Icon Id="FerrocordIcon" SourceFile="$(var.IconFile)" />
+    <Property Id="ARPPRODUCTICON" Value="FerrocordIcon" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/ferrocord/ferrocord" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/ferrocord/ferrocord/issues" />
+    <Property Id="ARPURLUPDATEINFO" Value="https://github.com/ferrocord/ferrocord/releases" />
+    <Property Id="ARPCOMMENTS" Value="A fast, open-source Discord client" />
+    <Property Id="DisableAdvtShortcuts" Value="1" />
+
+    <!-- Scope: per-user unless ALLUSERS=1 is passed or chosen in the UI. -->
+    <Property Id="ApplicationFolderName" Value="Ferrocord" />
+    <Property Id="WixAppFolder" Value="WixPerUserFolder" />
+    <Property Id="DESKTOPSHORTCUT" Value="1" Secure="yes" />
+
+    <!-- Remember the install folder so upgrades and repairs reuse it. -->
+    <Property Id="APPLICATIONFOLDER" Secure="yes">
+      <RegistrySearch Id="FindMachineInstallDir" Root="HKLM" Key="Software\Ferrocord" Name="InstallDir" Type="raw" />
+      <RegistrySearch Id="FindUserInstallDir" Root="HKCU" Key="Software\Ferrocord" Name="InstallDir" Type="raw" />
+    </Property>
+
+    <!--
+      WixUI_Advanced proposes [LocalAppDataFolder]Apps\<name> for per-user installs and the
+      32-bit Program Files folder for per-machine ones. Point them at the folders Windows itself
+      uses for per-user apps (%LOCALAPPDATA%\Programs) and at the native Program Files.
+    -->
+    <SetProperty Id="WixPerUserFolder" Value="[LocalAppDataFolder]Programs\[ApplicationFolderName]" After="WixSetDefaultPerUserFolder" Sequence="both" />
+    <SetProperty Id="WixPerMachineFolder" Value="[ProgramFiles64Folder][ApplicationFolderName]" After="WixSetDefaultPerMachineFolder" Sequence="both" />
+    <!--
+      WixUI_Advanced picks the machine folder whenever the user is Privileged, so a silent
+      per-user install from an elevated shell (CI, deployment tools) would land in Program Files.
+      Send per-user installs back to the per-user folder.
+    -->
+    <SetProperty Id="APPLICATIONFOLDER" Action="FixPerUserFolder" Value="[WixPerUserFolder]" After="WixSetPerMachineFolder" Sequence="both"
+                 Condition="ACTION=&quot;INSTALL&quot; AND (NOT ALLUSERS OR (ALLUSERS=2 AND MSIINSTALLPERUSER=1)) AND APPLICATIONFOLDER=WixPerMachineFolder" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="APPLICATIONFOLDER" Name="Ferrocord" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder" />
+    <StandardDirectory Id="DesktopFolder" />
+
+    <ComponentGroup Id="AppFiles" Directory="APPLICATIONFOLDER">
+      <Component Id="FerrocordExe" Bitness="always64">
+        <File Id="FerrocordExe" Source="$(var.SourceDir)\ferrocord.exe" KeyPath="yes" />
+        <!-- Lets Win+R / Start-Process find `ferrocord` without touching PATH. -->
+        <RegistryValue Root="HKMU" Key="Software\Microsoft\Windows\CurrentVersion\App Paths\ferrocord.exe" Type="string" Value="[#FerrocordExe]" />
+        <RegistryValue Root="HKMU" Key="Software\Microsoft\Windows\CurrentVersion\App Paths\ferrocord.exe" Name="Path" Type="string" Value="[APPLICATIONFOLDER]" />
+      </Component>
+      <Component Id="License" Bitness="always64">
+        <File Id="LicenseTxt" Source="$(var.SourceDir)\LICENSE.txt" KeyPath="yes" />
+      </Component>
+      <Component Id="InstallDirRecord" Bitness="always64">
+        <RegistryValue Root="HKMU" Key="Software\Ferrocord" Name="InstallDir" Type="string" Value="[APPLICATIONFOLDER]" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <Component Id="StartMenuShortcut" Directory="ProgramMenuFolder" Bitness="always64">
+      <Shortcut Id="StartMenuShortcut"
+                Name="Ferrocord"
+                Description="A fast, open-source Discord client"
+                Target="[#FerrocordExe]"
+                WorkingDirectory="APPLICATIONFOLDER">
+        <!-- Groups taskbar buttons with the running window (eframe app id). -->
+        <ShortcutProperty Key="System.AppUserModel.ID" Value="dev.ferrocord.Ferrocord" />
+      </Shortcut>
+      <RegistryValue Root="HKMU" Key="Software\Ferrocord" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <Component Id="DesktopShortcut" Directory="DesktopFolder" Bitness="always64" Condition="DESKTOPSHORTCUT = 1">
+      <Shortcut Id="DesktopShortcut"
+                Name="Ferrocord"
+                Description="A fast, open-source Discord client"
+                Target="[#FerrocordExe]"
+                WorkingDirectory="APPLICATIONFOLDER" />
+      <RegistryValue Root="HKMU" Key="Software\Ferrocord" Name="DesktopShortcut" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <Feature Id="Main" Title="Ferrocord" Description="The Ferrocord application." Level="1" AllowAbsent="no" Display="expand" ConfigurableDirectory="APPLICATIONFOLDER">
+      <ComponentGroupRef Id="AppFiles" />
+      <Feature Id="StartMenu" Title="Start menu shortcut" Description="Adds Ferrocord to the Start menu." Level="1">
+        <ComponentRef Id="StartMenuShortcut" />
+      </Feature>
+      <Feature Id="Desktop" Title="Desktop shortcut" Description="Adds a Ferrocord shortcut to the desktop." Level="1">
+        <ComponentRef Id="DesktopShortcut" />
+      </Feature>
+    </Feature>
+
+    <!-- Branded WixUI_Advanced: welcome, license, scope (just me / everyone), folder, features. -->
+    <WixVariable Id="WixUIBannerBmp" Value="$(var.ArtDir)\banner.bmp" />
+    <WixVariable Id="WixUIDialogBmp" Value="$(var.ArtDir)\dialog.bmp" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.ArtDir)\license.rtf" />
+
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch Ferrocord" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+    <Property Id="WixShellExecTarget" Value="[#FerrocordExe]" />
+    <CustomAction Id="LaunchFerrocord" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" DllEntry="WixShellExec" Impersonate="yes" />
+
+    <UI>
+      <ui:WixUI Id="WixUI_Advanced" />
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchFerrocord"
+               Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed" />
+    </UI>
+  </Package>
+</Wix>

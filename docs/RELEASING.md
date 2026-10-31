@@ -30,7 +30,7 @@ reproduce it locally.
 |---|---|
 | `ferrocord --version`, `--help` | `env!("CARGO_PKG_VERSION")` at compile time |
 | Windows `VERSIONINFO` (Explorer > Properties > Details) | `crates/app/build.rs` (winresource): `ProductVersion`/`FileVersion` strings = full version, numeric file version = `X.Y.Z.0` |
-| NSIS installer, Add/Remove Programs `DisplayVersion` | `packaging/windows/package.sh` passes it to `makensis` |
+| MSI `ProductVersion` (Apps & Features) | `packaging/windows/package.ps1` passes `X.Y.Z` to WiX (MSI versions are numeric); the full version is in the package description |
 | `.deb` | cargo-deb: `X.Y.Z-1`; pre-releases become `X.Y.Z~rc.N-1` so they sort before the final release |
 | `.rpm` | cargo-generate-rpm: `X.Y.Z-1`; pre-releases become `X.Y.Z~rc.N-1` |
 | AppStream `<release>` | `packaging/linux/stamp-metainfo.py`, run by the Release workflow before packaging |
@@ -131,27 +131,74 @@ the release notes). If the hotfix is also the newest release, it is marked
 
 | Platform | Built on | Files |
 |---|---|---|
-| Windows x86_64 | `windows-latest` | `ferrocord-X-windows-x86_64.zip`, `ferrocord-X-windows-x86_64-setup.exe` |
-| Windows ARM64 | `windows-11-arm` (native) | `ferrocord-X-windows-arm64.zip`, `ferrocord-X-windows-arm64-setup.exe` |
+| Windows x86_64 | `windows-latest` | `ferrocord-X-windows-x86_64.msi`, `ferrocord-X-windows-x86_64.zip` |
+| Windows ARM64 | `windows-11-arm` (native) | `ferrocord-X-windows-arm64.msi`, `ferrocord-X-windows-arm64.zip` |
 | Linux x86_64 | `ubuntu-22.04` (glibc 2.35) | `ferrocord-X-linux-x86_64.tar.gz`, `ferrocord_X-1_amd64.deb`, `ferrocord-X-1.x86_64.rpm`, `ferrocord-X-linux-x86_64.AppImage` |
 | Linux aarch64 | `ubuntu-22.04-arm` | `...-linux-aarch64.tar.gz`, `..._arm64.deb`, `...aarch64.rpm`, `...-linux-aarch64.AppImage` |
-| macOS (universal) | `macos-15` (x86_64 cross-compiled) | `ferrocord-X-macos-universal.dmg`, `ferrocord-X-macos-universal.tar.gz` |
+| macOS Apple Silicon | `macos-15` | `ferrocord-X-macos-arm64.dmg` |
+| macOS Intel | `macos-15` (cross-compiled, tested under Rosetta 2) | `ferrocord-X-macos-x86_64.dmg` |
 | All | | `SHA256SUMS`, plus a signed SLSA build-provenance attestation per file |
+
+The run also keeps two non-release artifacts: `winget-manifests` and `homebrew-cask`
+(see [Distribution channels](#distribution-channels)).
 
 Users can verify a download with `gh attestation verify <file> --repo ferrocord/ferrocord`
 and `sha256sum -c SHA256SUMS --ignore-missing`.
 
 Binaries are built with the `dist` profile (`release` + fat LTO + one codegen unit).
 
-**Windows installer.** NSIS, per-user (no admin rights, no UAC prompt), installs
-to `%LOCALAPPDATA%\Programs\Ferrocord`, creates a Start-menu shortcut (desktop
-shortcut optional), registers an uninstaller under *Apps > Installed apps*, and
-offers to open the WebView2 download page if the runtime is missing (only needed
-for captchas; preinstalled on Windows 11). Silent: `setup.exe /S [/D=dir]`,
-uninstall: `uninstall.exe /S`. User data and the saved login are kept on
-uninstall. The installer is compiled on Linux with the distribution's `makensis`
-for both architectures (the x86 installer stub runs natively on x64 and emulated
-on ARM64) and is smoke-tested on real x64 and ARM64 Windows runners.
+**Windows installer (MSI).** Built with the [WiX Toolset](https://wixtoolset.org)
+5 from `packaging/windows/ferrocord.wxs`, using the WixUI_Advanced dialogs with
+Ferrocord artwork:
+
+1. Welcome + license page. **Install** installs for the current user right away;
+   **Advanced** opens the remaining pages.
+2. Installation scope: *just for you* (`%LOCALAPPDATA%\Programs\Ferrocord`, no
+   admin rights, no UAC prompt) or *all users* (`%ProgramFiles%\Ferrocord`,
+   elevates). Per-machine installs can pick another folder.
+3. Features: Start menu shortcut, desktop shortcut (both on by default).
+4. Progress, then a finish page with *Launch Ferrocord*.
+
+The package registers `ferrocord.exe` under *App Paths* (so `Win+R ferrocord`
+works), shows the icon and links in *Apps & Features*, remembers the install
+folder for upgrades, and offers to close a running copy (Restart Manager).
+Installing a newer MSI replaces the old version in place (`MajorUpgrade` keyed on
+the fixed `UpgradeCode` in the `.wxs` file, which must never change); installing
+an older one is refused. The MSI is checked with the ICE validators
+(`wix msi validate`) on every build.
+
+Why MSI instead of an `.exe` installer: it is what Windows administrators deploy
+(Intune, Group Policy, SCCM, `msiexec` with standard switches), winget handles it
+natively, upgrades and repairs are transactional and roll back on failure, and the
+same package covers per-user and per-machine installs.
+
+Command line:
+
+```bat
+msiexec /i ferrocord-X-windows-x86_64.msi /qn                     :: per-user, silent
+msiexec /i ferrocord-X-windows-x86_64.msi /qn ALLUSERS=1          :: all users (admin)
+msiexec /i ferrocord-X-windows-x86_64.msi /qn DESKTOPSHORTCUT=0   :: no desktop shortcut
+msiexec /x ferrocord-X-windows-x86_64.msi /qn                     :: uninstall
+```
+
+Uninstalling keeps settings, plugins, caches and the saved login (Windows
+convention; reinstalling picks them up). `ferrocord --remove-user-data` removes
+them; see [USAGE.md](USAGE.md#where-ferrocord-keeps-its-files). The WebView2
+runtime is only needed for captchas and ships with Windows 11 and current
+Windows 10.
+
+The **zip** is the portable build: create an empty file named `portable` next to
+`ferrocord.exe` and all data is kept in a `data` folder beside it.
+
+**macOS disk images.** One `.dmg` per architecture, so each download contains a
+single-architecture app (half the size of a universal one). The image is
+LZFSE-compressed (`ULFO`, macOS 10.11+) and built with
+[dmgbuild](https://dmgbuild.readthedocs.io) from `packaging/macos/dmg-settings.py`:
+a 660x400 Finder window with a Retina background (drag the app onto
+*Applications*), large icons, no toolbars, and the Ferrocord volume icon. The app
+bundle (`dev.ferrocord.Ferrocord`, macOS 12+) declares camera and microphone usage
+strings; Developer ID builds use the hardened runtime with the entitlements in
+`packaging/macos/Ferrocord.entitlements`.
 
 **Smoke tests** (all run before anything is published):
 
@@ -162,11 +209,17 @@ on ARM64) and is smoke-tested on real x64 and ARM64 Windows runners.
   `fedora:latest` containers with only the base graphics/font libraries; checks
   that the WebKit helper processes are bundled.
 - `.tar.gz`: extracted and run in `ubuntu:24.04` with the runtime libraries.
-- Windows: zip extracted, version resource and icon checked, `--version`;
-  installer run silently, files/shortcut/registry checked, installed exe run,
-  silent uninstall verified clean.
-- macOS: dmg verified and mounted, signature verified, universal binary run
-  natively and under Rosetta, tarball run.
+- Windows (x64 and ARM64 runners): zip extracted, version resource and icon
+  checked, `--version`, portable mode checked with `--paths`; MSI properties
+  checked (version, `UpgradeCode`, dual scope); silent per-user install, files,
+  shortcuts, App Paths and Windows Installer registration checked, installed exe
+  run, silent uninstall verified clean. When an earlier release exists, its MSI
+  is installed first and the new one must upgrade it in place.
+- macOS (arm64 natively, x86_64 under Rosetta 2): dmg verified, format `ULFO`,
+  mounted; Finder layout, background, volume icon and Applications link present;
+  `Info.plist`, resources, signature (and entitlements + Gatekeeper assessment for
+  Developer ID builds) and architecture checked; app copied out like a drag
+  install and run.
 
 `--version` exits before any window or WebView is created, so no display is needed.
 
@@ -183,31 +236,70 @@ on ARM64) and is smoke-tested on real x64 and ARM64 Windows runners.
 4. **Labels**: create a `release` label (release-plz adds it to release PRs).
 5. Actions settings: allow GitHub Actions to create pull requests.
 
-## Code signing and notarization (not configured yet)
+## Code signing and notarization
 
-Releases are currently **unsigned** (Windows SmartScreen warns; macOS Gatekeeper
-blocks the app until the user right-clicks > Open or runs
-`xattr -dr com.apple.quarantine /Applications/Ferrocord.app`). Integrity is
-covered by `SHA256SUMS` and the provenance attestations. To add signing:
+Signing is wired into the workflow and switches on when the secrets exist.
+Without them, releases are built **unsigned** (Windows SmartScreen warns on the
+first run; macOS refuses to open the app until the user approves it in *System
+Settings > Privacy & Security > Open Anyway*). Integrity is always covered by
+`SHA256SUMS` and the provenance attestations.
 
-- **Windows** (Authenticode): sign `ferrocord.exe` in the `build` job right
-  after "Stage binary" (before upload), and the `*-setup.exe` + `uninstall.exe`
-  after packaging. Options: Azure Trusted Signing (`azure/trusted-signing-action`,
-  secrets `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, account and
-  profile names), or an OV/EV certificate with `signtool` (`WINDOWS_CERT_PFX`
-  base64 + `WINDOWS_CERT_PASSWORD`). Signing the NSIS uninstaller requires
-  `!uninstfinalize` in `installer.nsi`; since makensis runs on Linux, either
-  sign with `osslsigncode`/`jsign` there or move the installer job to Windows.
-- **macOS**: import a *Developer ID Application* certificate
-  (`MACOS_CERT_P12` base64, `MACOS_CERT_PASSWORD`) into a temporary keychain in
-  `package-macos`, set `MACOS_SIGN_IDENTITY` (package.sh then signs with the
-  hardened runtime and a timestamp), sign the `.dmg`, then
-  `xcrun notarytool submit --wait` (App Store Connect API key:
-  `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`, `APPLE_API_KEY_P8`) and
-  `xcrun stapler staple` the app and the dmg.
-- **Linux**: optionally GPG-sign `SHA256SUMS` (`SHA256SUMS.asc`), the `.rpm`
-  (`cargo generate-rpm --signing-key`) and publish an APT/RPM repository;
-  AppImages can embed a signature with `appimagetool --sign`.
+| Secret | Used by | Purpose |
+|---|---|---|
+| `WINDOWS_SIGN_PFX_BASE64` | `package-windows` | Authenticode certificate (`.pfx`, base64). `ferrocord.exe` is signed before it goes into the zip and MSI, then the `.msi` itself; both are timestamped. |
+| `WINDOWS_SIGN_PASSWORD` | `package-windows` | Its password. |
+| `MACOS_SIGN_P12_BASE64` | `package-macos` | *Developer ID Application* certificate + key (`.p12`, base64), imported into a throwaway keychain. |
+| `MACOS_SIGN_P12_PASSWORD` | `package-macos` | Its password. |
+| `MACOS_SIGN_IDENTITY` | `package-macos` | e.g. `Developer ID Application: Name (TEAMID)`. The app is signed with the hardened runtime and entitlements, then the `.dmg`. |
+| `APPLE_NOTARY_KEY_BASE64` | `package-macos` | App Store Connect API key (`.p8`, base64) for `notarytool`. With it, the `.dmg` is notarized and the ticket stapled. |
+| `APPLE_NOTARY_KEY_ID`, `APPLE_NOTARY_ISSUER` | `package-macos` | The key's id and issuer id. |
+
+For Windows, a cloud signing service (Azure Trusted Signing, SignPath for open
+source projects) avoids handling a `.pfx`: replace `Invoke-Sign` in
+`packaging/windows/package.ps1` with the service's tool. Linux: optionally
+GPG-sign `SHA256SUMS`, the `.rpm` (`cargo generate-rpm --signing-key`) and the
+AppImage (`appimagetool --sign`).
+
+## Distribution channels
+
+Besides the GitHub release, two package managers are fed after a stable release
+is published (pre-releases are skipped). Both jobs render their files on every
+run, so dry runs show exactly what would be submitted, and only submit when their
+token exists.
+
+**winget** (`publish-winget`). `packaging/winget/render.ps1` writes the
+`Ferrocord.Ferrocord` manifests: each MSI is listed for the `user` and `machine`
+scopes, with its `ProductCode` and the `UpgradeCode`, so `winget upgrade` and
+`winget uninstall` find existing installs. The `winget-manifests` job validates
+them with `winget validate`. With the `WINGET_TOKEN` secret (a classic PAT with
+`public_repo`, from an account that has forked
+[winget-pkgs](https://github.com/microsoft/winget-pkgs)), `wingetcreate submit`
+opens the pull request. The very first submission is reviewed by hand by the
+winget maintainers; later ones are usually merged automatically.
+
+```powershell
+winget install Ferrocord.Ferrocord                    # per-user
+winget install Ferrocord.Ferrocord --scope machine    # all users
+```
+
+**Homebrew** (`publish-homebrew`). `packaging/homebrew/render-cask.py` fills
+`ferrocord.rb.in` with the version and both DMG checksums (`arch arm:/intel:`).
+The cask installs the app, links `ferrocord` into the `PATH`, and its `zap` stanza
+lists every folder Ferrocord writes to. Unnotarized builds get a `caveats` note on
+approving the first launch. With the `HOMEBREW_TAP_TOKEN` secret (write access to
+the tap repository), the cask is committed to `Casks/ferrocord.rb` in
+`<owner>/homebrew-tap` (override with the `HOMEBREW_TAP` repository variable).
+
+```sh
+brew install --cask ferrocord/tap/ferrocord
+```
+
+Submitting to the main `homebrew/cask` repository requires notarized builds and
+some popularity; the tap works from the first release.
+
+Linux packages are attached to the release (`.deb`, `.rpm`, AppImage). Flathub
+and APT/RPM repositories are possible later; `dev.ferrocord.Ferrocord.metainfo.xml`
+is already AppStream-valid.
 
 ## Building packages locally
 
@@ -219,10 +311,27 @@ bash packaging/linux/package.sh x86_64-unknown-linux-gnu "$(cargo metadata --no-
 docker run --rm -v "$PWD:/w" -w /w fedora:latest bash packaging/linux/smoke-test.sh rpm dist/ferrocord-*.rpm 0.1.0
 ```
 
-Windows zip + installer (any OS with `makensis` and `zip`):
-`bash packaging/windows/package.sh target/x86_64-pc-windows-msvc/dist/ferrocord.exe 0.1.0 x86_64 dist`,
-then on Windows `./packaging/windows/smoke-test.ps1 -Zip ... -Installer ... -Version 0.1.0`
-(it installs into a temporary directory and uninstalls again).
+Windows zip + MSI (on Windows, with the .NET SDK):
+
+```powershell
+dotnet tool install --global wix --version 5.0.2
+wix extension add --global WixToolset.UI.wixext/5.0.2 WixToolset.Util.wixext/5.0.2
+cargo build --locked --profile dist -p ferrocord
+./packaging/windows/package.ps1 -Exe target/dist/ferrocord.exe -Version 0.1.0 -Arch x86_64 -OutDir dist
+./packaging/windows/smoke-test.ps1 -Zip dist/ferrocord-0.1.0-windows-x86_64.zip `
+    -Msi dist/ferrocord-0.1.0-windows-x86_64.msi -Version 0.1.0
+```
+
+The smoke test really installs Ferrocord for the current user and uninstalls it
+again; it refuses to run if Ferrocord is already installed.
+
+macOS DMG (on a Mac, with `pipx install dmgbuild`):
+
+```sh
+cargo build --locked --profile dist --target aarch64-apple-darwin -p ferrocord
+bash packaging/macos/package.sh 0.1.0 arm64 target/aarch64-apple-darwin/dist/ferrocord dist
+bash packaging/macos/smoke-test.sh dist/ferrocord-0.1.0-macos-arm64.dmg 0.1.0 arm64
+```
 
 Release notes for a tag: `.github/scripts/release-notes.sh v0.2.0`.
 Preview the next release PR: `release-plz update` (then `git restore .`).
@@ -233,3 +342,12 @@ Preview the next release PR: `release-plz update` (then `git restore .`).
 by `app_icon()` in `crates/app/src/main.rs`. After editing it, run
 `python3 packaging/icons/generate.py` (standard library only) and commit the
 regenerated PNGs (hicolor 16-512), `ferrocord.ico` and `ferrocord.icns`.
+
+### Installer artwork
+
+`python3 packaging/installer-art/generate.py` (needs Pillow) renders the WiX
+banner (493x58) and dialog (493x312) bitmaps in `packaging/windows/wix/` and the
+DMG background (`packaging/macos/dmg/background.png` + `@2x`) from the icon and
+the bundled Inter font. Run it after changing the icon or the installer text, and
+keep the icon positions in `packaging/macos/dmg-settings.py` in line with the
+arrow in the background.

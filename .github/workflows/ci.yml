@@ -129,6 +129,17 @@ jobs:
         run: docker run --rm -v "$PWD:/repo" --workdir /repo rhysd/actionlint:1.7.12 -color
       - name: shellcheck packaging scripts
         run: shellcheck --severity=style packaging/*/*.sh .github/scripts/*.sh
+      - name: PSScriptAnalyzer (Windows packaging scripts)
+        shell: pwsh
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module PSScriptAnalyzer -RequiredVersion 1.24.0 -Scope CurrentUser
+          $issues = Get-ChildItem packaging -Recurse -Filter *.ps1 |
+            ForEach-Object { Invoke-ScriptAnalyzer -Path $_.FullName -Settings packaging/PSScriptAnalyzerSettings.psd1 }
+          $issues | Format-Table ScriptName, Line, RuleName, Message -AutoSize -Wrap
+          if ($issues) { throw "PSScriptAnalyzer found $(@($issues).Count) issue(s)" }
+      - name: Python packaging helpers compile
+        run: python3 -m py_compile packaging/*/*.py
       - name: Validate desktop entry and AppStream metadata
         run: |
           sudo apt-get update -q

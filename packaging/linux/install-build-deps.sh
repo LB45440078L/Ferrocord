@@ -19,8 +19,8 @@ packages=(
 )
 if [[ ${1:-} == --package ]]; then
   # dpkg-shlibdeps (cargo-deb $auto), archives, AppStream/desktop validation,
-  # makensis for the Windows installer, file for AppImage tooling
-  packages+=(dpkg-dev zip file desktop-file-utils appstream nsis)
+  # file for AppImage tooling
+  packages+=(dpkg-dev zip file desktop-file-utils appstream)
 fi
 
 export DEBIAN_FRONTEND=noninteractive
