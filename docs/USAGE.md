@@ -2,6 +2,38 @@
 
 ## Installing
 
+### Prebuilt packages
+
+Each [release](https://github.com/ferrocord/ferrocord/releases) has packages
+for Windows, Linux and macOS (`X` is the version):
+
+| File | How to install |
+|---|---|
+| `ferrocord-X-windows-x86_64-setup.exe`, `…-arm64-setup.exe` | Run it. It installs for the current user only (no administrator rights) into `%LOCALAPPDATA%\Programs\Ferrocord`, adds a Start-menu entry and an uninstaller (*Settings > Apps*). Silent install: `setup.exe /S`. |
+| `ferrocord-X-windows-<arch>.zip` | Portable: unzip anywhere and run `ferrocord.exe`. |
+| `ferrocord_X-1_amd64.deb`, `…_arm64.deb` | `sudo apt install ./ferrocord_X-1_amd64.deb` (Debian 12+, Ubuntu 22.04+). |
+| `ferrocord-X-1.x86_64.rpm`, `….aarch64.rpm` | `sudo dnf install ./ferrocord-X-1.x86_64.rpm` (Fedora) or `sudo zypper install ./…rpm` (openSUSE). |
+| `ferrocord-X-linux-<arch>.AppImage` | `chmod +x ferrocord-*.AppImage && ./ferrocord-*.AppImage`. Bundles GTK and WebKitGTK; needs glibc 2.35+ and the usual graphics libraries. |
+| `ferrocord-X-linux-<arch>.tar.gz` | Unpack and run `ferrocord`. Needs the WebKitGTK 4.1, GTK 3 and ALSA runtime libraries. Copy `share/` to `~/.local/share/` for a menu entry and icon. |
+| `ferrocord-X-macos-universal.dmg` | Open it and drag *Ferrocord* to *Applications*. Runs natively on Apple Silicon and Intel, macOS 12+. |
+
+Notes:
+
+- **WebView2 (Windows).** Captchas during login use the Microsoft Edge
+  WebView2 runtime. It ships with Windows 11 and current Windows 10; if it is
+  missing, the installer offers to open the download page. Everything else works
+  without it.
+- **Unsigned builds.** Releases are not code-signed yet. On Windows, SmartScreen
+  may show *Windows protected your PC*: choose *More info > Run anyway*. On
+  macOS, right-click Ferrocord in *Applications* and choose *Open* the first
+  time (or run `xattr -dr com.apple.quarantine /Applications/Ferrocord.app`).
+- **Verifying downloads.** Check the file against `SHA256SUMS` from the same
+  release (`sha256sum -c SHA256SUMS --ignore-missing`), or verify its build
+  provenance with `gh attestation verify <file> --repo ferrocord/ferrocord`.
+- **Uninstalling** keeps your settings, plugins and cache (see
+  [Files and folders](#files-and-folders)) and the saved login in the system
+  credential vault. Delete them by hand for a clean slate.
+
 ### From source
 
 ```sh
@@ -17,7 +49,7 @@ Build requirements:
 |---|---|
 | Windows 10/11 | Rust (MSVC toolchain) and Visual Studio Build Tools. The WebView2 runtime (preinstalled on Windows 11) is used for captchas. |
 | macOS 12+ | Rust and Xcode command-line tools. |
-| Linux | Rust, a C/C++ compiler, and the `pkg-config`, `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libdbus-1-dev`, `libxkbcommon-dev` and `libssl-dev` packages. |
+| Linux | Rust, a C/C++ compiler, and the `pkg-config`, `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libdbus-1-dev`, `libxkbcommon-dev` and `libssl-dev` packages (on Debian/Ubuntu, `sudo packaging/linux/install-build-deps.sh` installs everything CI uses, including the voice/camera libraries). |
 
 The release binary is self-contained: fonts are embedded, and emoji and avatars
 are downloaded on demand and cached.

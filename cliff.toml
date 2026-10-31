@@ -1,0 +1,79 @@
+# git-cliff configuration (https://git-cliff.org/docs/configuration).
+#
+# Used in two places:
+#   * release-plz (release-plz.toml `changelog_config`) prepends the next
+#     version's section to CHANGELOG.md in the release PR;
+#   * the Release workflow renders the GitHub release notes for a tag with
+#     .github/scripts/release-notes.sh <tag> (also handy locally).
+#
+# Commits follow Conventional Commits (https://www.conventionalcommits.org) and
+# are grouped Keep a Changelog style. The templates only use variables that
+# both git-cliff and release-plz provide (version, timestamp, commits).
+
+[changelog]
+header = """
+# Changelog
+
+All notable changes to Ferrocord are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+Entries are generated from [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
+by [git-cliff](https://git-cliff.org) when a release PR is opened; edit them in that PR.
+"""
+body = """
+{%- macro remote_url() -%}https://github.com/ferrocord/ferrocord{%- endmacro -%}
+{% if version -%}
+  {%- set v = version | trim_start_matches(pat="v") -%}
+## [{{ v }}]({{ self::remote_url() }}/releases/tag/v{{ v }}) - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else -%}
+## [Unreleased]
+{% endif -%}
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim | upper_first }}
+{% for commit in commits %}
+- {% if commit.scope %}**{{ commit.scope }}:** {% endif %}\
+{% if commit.breaking %}[**breaking**] {% endif %}\
+{{ commit.message | split(pat="\n") | first | trim | upper_first }}\
+{% if commit.id %} ([{{ commit.id | truncate(length=7, end="") }}]({{ self::remote_url() }}/commit/{{ commit.id }})){% endif %}
+{%- endfor %}
+{% endfor %}
+"""
+footer = ""
+trim = true
+
+[git]
+conventional_commits = true
+# Keep non-conventional commits (e.g. history before Conventional Commits were adopted) under "Other".
+filter_unconventional = false
+split_commits = false
+protect_breaking_commits = true
+filter_commits = false
+topo_order = false
+sort_commits = "oldest"
+tag_pattern = "v[0-9]+\\.[0-9]+\\.[0-9]+.*"
+# Pre-release tags are folded into the following final release, so a full
+# `git cliff` run lists v0.2.0 as everything since v0.1.0.
+ignore_tags = "v[0-9]+\\.[0-9]+\\.[0-9]+-.*"
+commit_preprocessors = [
+  # "(#123)" -> link to the pull request / issue
+  { pattern = '\((\w+\s)?#([0-9]+)\)', replace = "([#${2}](https://github.com/ferrocord/ferrocord/issues/${2}))" },
+]
+# First match wins. Group names carry an HTML comment so they sort in Keep a
+# Changelog order; `striptags` removes it when rendering.
+commit_parsers = [
+  { message = "^chore\\(release\\)", skip = true },
+  { message = "^(chore|build|ci)\\(deps", skip = true },
+  { body = ".*[Ss]ecurity", group = "<!-- 5 -->Security" },
+  { message = "^sec(urity)?(\\(.*\\))?!?:", group = "<!-- 5 -->Security" },
+  { message = "^[a-z]+(\\(.*\\))?!?: ([Rr]emove|[Dd]rop) ", group = "<!-- 3 -->Removed" },
+  { message = "^[a-z]+(\\(.*\\))?!?: [Dd]eprecate ", group = "<!-- 2 -->Deprecated" },
+  { message = "^feat", group = "<!-- 0 -->Added" },
+  { message = "^fix", group = "<!-- 4 -->Fixed" },
+  { message = "^perf", group = "<!-- 1 -->Changed" },
+  { message = "^refactor", group = "<!-- 1 -->Changed" },
+  { message = "^revert", group = "<!-- 1 -->Changed" },
+  { message = "^docs", group = "<!-- 6 -->Documentation" },
+  { message = "^(test|style|ci|build|chore)", skip = true },
+  { message = ".*", group = "<!-- 7 -->Other" },
+]

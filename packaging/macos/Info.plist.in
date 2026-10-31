@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Template: packaging/macos/package.sh replaces @VERSION@, @SHORT_VERSION@ and @MIN_MACOS@. -->
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleDisplayName</key>
+  <string>Ferrocord</string>
+  <key>CFBundleExecutable</key>
+  <string>ferrocord</string>
+  <key>CFBundleIconFile</key>
+  <string>Ferrocord</string>
+  <key>CFBundleIdentifier</key>
+  <string>dev.ferrocord.Ferrocord</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleName</key>
+  <string>Ferrocord</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>@SHORT_VERSION@</string>
+  <key>CFBundleVersion</key>
+  <string>@SHORT_VERSION@</string>
+  <key>CFBundleGetInfoString</key>
+  <string>Ferrocord @VERSION@</string>
+  <key>LSApplicationCategoryType</key>
+  <string>public.app-category.social-networking</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>@MIN_MACOS@</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+  <key>NSHumanReadableCopyright</key>
+  <string>Copyright (c) Ferrocord contributors. BSD-3-Clause license.</string>
+  <key>NSCameraUsageDescription</key>
+  <string>Ferrocord uses the camera only when you turn on video in a call.</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Ferrocord uses the microphone only when you join a voice channel.</string>
+</dict>
+</plist>

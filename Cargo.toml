@@ -20,7 +20,7 @@ version = "0.1.0"
 edition = "2024"
 license = "BSD-3-Clause"
 repository = "https://github.com/ferrocord/ferrocord"
-rust-version = "1.88"
+rust-version = "1.95"
 authors = ["Ferrocord contributors"]
 
 [workspace.dependencies]

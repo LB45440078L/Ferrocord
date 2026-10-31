@@ -1,0 +1,85 @@
+# cargo-deny configuration (https://embarkstudios.github.io/cargo-deny/).
+# Run locally with `cargo deny check`; CI runs it on every push and PR.
+
+[graph]
+# Check the dependency graph of every platform we ship, not just the host.
+targets = [
+  "x86_64-pc-windows-msvc",
+  "aarch64-pc-windows-msvc",
+  "x86_64-unknown-linux-gnu",
+  "aarch64-unknown-linux-gnu",
+  "x86_64-apple-darwin",
+  "aarch64-apple-darwin",
+]
+all-features = true
+
+[output]
+feature-depth = 1
+
+[advisories]
+# Vulnerabilities and yanked crates always fail. "Unmaintained" notices fail
+# only for direct dependencies of workspace crates; transitive ones are
+# reported upstream instead of blocking CI.
+unmaintained = "workspace"
+yanked = "deny"
+ignore = [
+  # Format: { id = "RUSTSEC-YYYY-NNNN", reason = "why it does not affect Ferrocord; when to revisit" }
+  { id = "RUSTSEC-2023-0071", reason = "rsa: Marvin timing side channel, no fixed release exists. Only used for the QR remote-auth handshake (one RSA-OAEP decryption per message with a fresh per-session key, performed locally), which an attacker cannot time at scale. Revisit when rsa 0.10 is released." },
+  # The four below come in through davey (DAVE E2EE) -> openmls_rust_crypto 0.5 -> hpke-rs 0.6.1, which pins
+  # these versions. Fixed versions need openmls_rust_crypto >= 0.6, which davey 0.2.0-beta.1 (latest) does not
+  # support. Revisit on every davey release; drop the entries as soon as `cargo update` can resolve them.
+  { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5 timing variability in P-256 math: affects local MLS key operations only and needs a precise local timing attacker; fix requires the elliptic-curve 0.14 line that davey/openmls do not use yet." },
+  { id = "RUSTSEC-2026-0212", reason = "libcrux-secrets constant-time select may be incorrect on aarch64: correctness risk for ARM64 builds' HPKE; DAVE failures would surface as decryption errors and trigger group re-initialization, not plaintext leakage. Pinned by hpke-rs 0.6.1." },
+  { id = "RUSTSEC-2026-0207", reason = "libcrux-sha3 incremental SHAKE: DAVE's ciphersuite (DHKEM-P256, HKDF-SHA256, AES-128-GCM) never uses SHAKE. Pinned by hpke-rs 0.6.1." },
+  { id = "RUSTSEC-2026-0208", reason = "libcrux-sha3 AVX2 SHAKE-256 panic: SHAKE is unused by DAVE's ciphersuite. Pinned by hpke-rs 0.6.1." },
+]
+
+[licenses]
+# Everything here is compatible with distributing Ferrocord under BSD-3-Clause.
+allow = [
+  "0BSD",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "BSL-1.0",
+  "CC0-1.0",
+  "CDLA-Permissive-2.0",
+  "ISC",
+  "MIT",
+  "MIT-0",
+  "MPL-2.0",
+  "OFL-1.1",
+  "Ubuntu-font-1.0",
+  "Unicode-3.0",
+  "Unlicense",
+  "Zlib",
+]
+confidence-threshold = 0.9
+exceptions = []
+
+[licenses.private]
+# Workspace crates marked `publish = false` are ours (BSD-3-Clause).
+ignore = true
+
+[bans]
+# The egui/winit/wgpu and GTK stacks pull in several major versions of a few
+# crates (windows-sys, bitflags, ...). Report them, don't fail on them.
+multiple-versions = "warn"
+# Workspace path dependencies (`ferrocord-core = { path = ... }`) count as
+# wildcards because the crates are not marked `publish = false`.
+# TODO: add `publish = false` to the crates, then tighten this to "deny".
+wildcards = "warn"
+allow-wildcard-paths = true
+highlight = "all"
+deny = [
+  # TLS is rustls + aws-lc-rs everywhere; keep OpenSSL out of the release binary.
+  { crate = "openssl", reason = "use rustls (aws-lc-rs) instead" },
+  { crate = "native-tls", reason = "use rustls (aws-lc-rs) instead" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

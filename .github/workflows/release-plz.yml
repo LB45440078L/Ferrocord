@@ -1,0 +1,84 @@
+name: Release PR
+
+# Keeps a "chore(release): vX.Y.Z" pull request open that bumps the workspace
+# version and prepends CHANGELOG.md (release-plz + git-cliff, see
+# release-plz.toml). Merging it makes release-plz push the vX.Y.Z tag, which
+# starts the Release workflow. See docs/RELEASING.md.
+#
+# Token: tags and PRs created with the default GITHUB_TOKEN do not trigger other
+# workflows, so CI would not run on the release PR. Configure a repository
+# secret RELEASE_PLZ_TOKEN (fine-grained PAT or GitHub App token with
+# "Contents" and "Pull requests" read/write) to fix that. Without it, the
+# release job falls back to dispatching the Release workflow explicitly.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-plz-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-pr:
+    name: Open or update the release PR
+    if: github.repository_owner == 'ferrocord'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: release-plz/action@v0.5
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}
+
+  release:
+    name: Tag merged release
+    if: github.repository_owner == 'ferrocord'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write # push the tag
+      pull-requests: read # find the merged release PR (release_always = false)
+      actions: write # dispatch release.yml when no RELEASE_PLZ_TOKEN is configured
+    env:
+      HAS_RELEASE_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}
+      - uses: dtolnay/rust-toolchain@stable
+      - id: release-plz
+        uses: release-plz/action@v0.5
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}
+      - name: Start the Release workflow for the new tag
+        # A tag pushed with GITHUB_TOKEN does not trigger `on: push: tags`, but a
+        # workflow_dispatch does. With RELEASE_PLZ_TOKEN the tag push triggers it.
+        if: steps.release-plz.outputs.releases_created == 'true' && env.HAS_RELEASE_TOKEN != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASES: ${{ steps.release-plz.outputs.releases }}
+        run: |
+          tag=$(jq -r '.[] | select(.package_name == "ferrocord") | .tag' <<< "$RELEASES")
+          if [[ -z $tag || $tag == null ]]; then
+            echo "::error::no ferrocord tag in release-plz output: $RELEASES"
+            exit 1
+          fi
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$tag" -f dry-run=false
+          echo "Dispatched the Release workflow for $tag" >> "$GITHUB_STEP_SUMMARY"

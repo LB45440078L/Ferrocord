@@ -49,6 +49,24 @@ plugin system and a local API for your own tools.
 |---|---|
 | ![Login](docs/images/login.png) | ![Settings](docs/images/settings.png) |
 
+## Installing
+
+Download the file for your system from the
+[latest release](https://github.com/ferrocord/ferrocord/releases/latest):
+
+| System | Download |
+|---|---|
+| Windows 10/11 (x64 or ARM64) | `…-windows-<arch>-setup.exe` (per-user installer, no admin rights) or the portable `.zip` |
+| Debian, Ubuntu (amd64 or arm64) | `ferrocord_<version>-1_<arch>.deb`: `sudo apt install ./ferrocord_*.deb` |
+| Fedora, openSUSE (x86_64 or aarch64) | `ferrocord-<version>-1.<arch>.rpm`: `sudo dnf install ./ferrocord-*.rpm` |
+| Any Linux | `.AppImage` (`chmod +x` and run) or the `.tar.gz` |
+| macOS 12+ (Apple Silicon and Intel) | `…-macos-universal.dmg` |
+
+Release builds are not code-signed yet: Windows SmartScreen may ask you to
+confirm, and on macOS you need to right-click the app and choose *Open* the
+first time. Every release lists SHA-256 checksums and build provenance
+attestations. See [docs/USAGE.md](docs/USAGE.md#installing) for details.
+
 ## Quick start
 
 ```sh
@@ -58,7 +76,7 @@ cargo run --release            # log in with your account
 cargo run --release -- --demo  # explore the UI offline with sample data
 ```
 
-Requirements: Rust 1.88+ (edition 2024) and a C/C++ toolchain (MSVC on
+Requirements: Rust 1.95+ (edition 2024) and a C/C++ toolchain (MSVC on
 Windows, clang/gcc elsewhere). Captchas on Windows need the WebView2 runtime,
 which ships with Windows 10/11. Linux also needs the webkit2gtk, libdbus and
 libxkbcommon development packages. See [docs/USAGE.md](docs/USAGE.md) for
@@ -81,7 +99,8 @@ missing:
 | Search, pins, quick switcher, invites (join) | ✅ |
 | Plugins and local API | ✅ |
 | Security-key (WebAuthn) 2FA | ❌ use QR login instead |
-| Voice, video, screen share, Go Live (RTC + DAVE end-to-end encryption) | ❌ planned |
+| Voice and camera video in servers and DMs, DAVE end-to-end encryption | ✅ (not yet tested against live Discord) |
+| Screen share / Go Live, soundboard, noise suppression | ❌ planned |
 | Slash commands / app interactions, polls, soundboard, activities | ❌ planned |
 | Server administration UI (roles, channel editing, moderation panels) | ⚠️ partial (kick, ban and timeout exist as REST helpers in `ferrocord-http`, with no UI yet) |
 | Account settings editing (avatar, password, 2FA setup), Nitro and billing | ❌ use the official app |
@@ -102,6 +121,9 @@ protocol notes these features are built on.
 | `crates/core` | `Client` orchestrator, actions, events, config, the `Extension` trait |
 | `crates/plugin` | Sandboxed Luau plugin runtime |
 | `crates/api` | Local HTTP + WebSocket control API |
+| `crates/voice` | Voice gateway v9, UDP/RTP transport encryption, DAVE E2EE, Opus audio engine, video pipeline |
+| `crates/media` | Camera capture, H.264 encode/decode, RTP H.264 packetization |
+| `crates/testkit` | Mock Discord (REST, gateway, remote auth) for integration tests |
 | `crates/app` | The desktop application (`ferrocord` binary) |
 
 ## Contributing

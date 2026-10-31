@@ -55,10 +55,21 @@ The live QR handshake check is a quick way to detect drift:
 cargo run -p ferrocord-auth --example qr_probe
 ```
 
-## Commit messages
+## Commit messages and PR titles
 
-Use the imperative mood ("Add forum post list"). Write a short summary line,
-then a blank line, then the details if needed. Reference issues with `#123`.
+We use [Conventional Commits](https://www.conventionalcommits.org/): release
+versions and the changelog are generated from them (see
+[docs/RELEASING.md](docs/RELEASING.md)), and CI checks PR titles.
+
+```text
+feat(voice): add per-user volume
+fix(chat): keep history visible after sending
+docs: explain the DAVE handshake
+```
+
+Types: `feat` (minor bump), `fix`/`perf` (patch), `docs`, `refactor`, `test`,
+`ci`, `build`, `chore`. Breaking changes use `feat!:` or a `BREAKING CHANGE:`
+footer. Use the imperative mood and reference issues with `#123`.
 
 ## Plugins
 

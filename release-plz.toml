@@ -1,0 +1,97 @@
+# release-plz configuration (https://release-plz.dev/docs/config).
+#
+# Model: the whole workspace is one product with one version
+# (`[workspace.package] version` in Cargo.toml) and one tag, `vX.Y.Z`.
+# Nothing is published to crates.io. On every push to main the
+# "Release PR" workflow opens/updates a PR that bumps the version and
+# prepends the changelog. Merging it makes release-plz push the tag; the
+# Release workflow (.github/workflows/release.yml) then builds, tests,
+# packages and publishes the GitHub release. See docs/RELEASING.md.
+
+[workspace]
+# Read released versions from git tags (`v{{ version }}`), never from a registry.
+git_only = true
+publish = false
+git_tag_name = "v{{ version }}"
+# Only the `ferrocord` package (below) tags and writes the changelog.
+git_tag_enable = false
+changelog_update = false
+# The GitHub release is created by release.yml once all artifacts are built.
+git_release_enable = false
+# Tag only when a release-plz PR is merged, not on every push to main.
+release_always = false
+changelog_config = "cliff.toml"
+# An application, not a library: `feat` bumps the minor version even in 0.x.
+features_always_increment_minor = true
+semver_check = false
+dependencies_update = false
+pr_labels = ["release"]
+pr_name = "chore(release): v{{ version }}"
+
+# Every workspace member must be listed in the "ferrocord" version group so
+# they move together (they all use `version.workspace = true`).
+# CI (`release-plz-config` job in ci.yml) fails if a member is missing.
+
+[[package]]
+name = "ferrocord"
+version_group = "ferrocord"
+git_tag_enable = true
+changelog_update = true
+changelog_path = "CHANGELOG.md"
+changelog_include = [
+  "ferrocord-model",
+  "ferrocord-http",
+  "ferrocord-gateway",
+  "ferrocord-auth",
+  "ferrocord-store",
+  "ferrocord-core",
+  "ferrocord-plugin",
+  "ferrocord-api",
+  "ferrocord-voice",
+  "ferrocord-media",
+  "ferrocord-testkit",
+]
+
+[[package]]
+name = "ferrocord-model"
+version_group = "ferrocord"
+
+[[package]]
+name = "ferrocord-http"
+version_group = "ferrocord"
+
+[[package]]
+name = "ferrocord-gateway"
+version_group = "ferrocord"
+
+[[package]]
+name = "ferrocord-auth"
+version_group = "ferrocord"
+
+[[package]]
+name = "ferrocord-store"
+version_group = "ferrocord"
+
+[[package]]
+name = "ferrocord-core"
+version_group = "ferrocord"
+
+[[package]]
+name = "ferrocord-plugin"
+version_group = "ferrocord"
+
+[[package]]
+name = "ferrocord-api"
+version_group = "ferrocord"
+
+[[package]]
+name = "ferrocord-voice"
+version_group = "ferrocord"
+
+[[package]]
+name = "ferrocord-media"
+version_group = "ferrocord"
+
+[[package]]
+name = "ferrocord-testkit"
+version_group = "ferrocord"

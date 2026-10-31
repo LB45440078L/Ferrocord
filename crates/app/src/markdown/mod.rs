@@ -1,4 +1,4 @@
-//! Discord markdown: parsing ([`parse`]) and egui rendering ([`render`]).
+//! Discord markdown: parsing ([`mod@parse`]) and egui rendering ([`mod@render`]).
 
 pub mod parse;
 pub mod render;

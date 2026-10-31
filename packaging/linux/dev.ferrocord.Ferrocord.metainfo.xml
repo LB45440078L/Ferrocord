@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright Ferrocord contributors -->
+<component type="desktop-application">
+  <id>dev.ferrocord.Ferrocord</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>BSD-3-Clause</project_license>
+
+  <name>Ferrocord</name>
+  <summary>Fast, lightweight Discord client</summary>
+  <developer id="dev.ferrocord">
+    <name>Ferrocord contributors</name>
+  </developer>
+
+  <description>
+    <p>
+      Ferrocord is an unofficial, open-source Discord client written in Rust.
+      Instead of a large Electron bundle it is a single native program with a
+      GPU-accelerated interface.
+    </p>
+    <ul>
+      <li>Password, two-factor, QR-code and token login</li>
+      <li>Servers, channels, threads, forums, direct messages and friends</li>
+      <li>Markdown, replies, reactions, attachments, embeds and notifications</li>
+      <li>Sandboxed Luau plugins and a local API for your own tools</li>
+    </ul>
+    <p>
+      Ferrocord is not affiliated with Discord Inc. Discord's Terms of Service do
+      not permit third-party clients, so using one carries a risk of account action.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">dev.ferrocord.Ferrocord.desktop</launchable>
+  <provides>
+    <binary>ferrocord</binary>
+  </provides>
+
+  <url type="homepage">https://github.com/ferrocord/ferrocord</url>
+  <url type="bugtracker">https://github.com/ferrocord/ferrocord/issues</url>
+  <url type="vcs-browser">https://github.com/ferrocord/ferrocord</url>
+  <url type="contribute">https://github.com/ferrocord/ferrocord/blob/main/CONTRIBUTING.md</url>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Chat view</caption>
+      <image>https://raw.githubusercontent.com/ferrocord/ferrocord/main/docs/images/chat.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Login</caption>
+      <image>https://raw.githubusercontent.com/ferrocord/ferrocord/main/docs/images/login.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Settings</caption>
+      <image>https://raw.githubusercontent.com/ferrocord/ferrocord/main/docs/images/settings.png</image>
+    </screenshot>
+  </screenshots>
+
+  <categories>
+    <category>Network</category>
+    <category>InstantMessaging</category>
+    <category>Chat</category>
+  </categories>
+  <keywords>
+    <keyword>discord</keyword>
+    <keyword>chat</keyword>
+    <keyword>messaging</keyword>
+  </keywords>
+
+  <content_rating type="oars-1.1">
+    <content_attribute id="social-chat">intense</content_attribute>
+    <content_attribute id="social-info">moderate</content_attribute>
+  </content_rating>
+
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  <requires>
+    <internet>always</internet>
+  </requires>
+
+  <!-- The release workflow adds the version being packaged (stamp-metainfo.py). -->
+  <releases>
+  </releases>
+</component>

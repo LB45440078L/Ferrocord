@@ -1,0 +1,14 @@
+# Keep pinned GitHub Actions major versions current. Cargo dependencies are
+# updated deliberately by maintainers (see CONTRIBUTING.md).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci
+      include: scope

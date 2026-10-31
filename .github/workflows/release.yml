@@ -1,0 +1,415 @@
+name: Release
+
+# Builds, packages, smoke-tests and publishes a release. See docs/RELEASING.md.
+#
+# * Push of a tag vX.Y.Z or vX.Y.Z-pre -> full release (prerelease if the version has a "-").
+# * workflow_dispatch                  -> dry run by default (everything except publishing).
+#   Run it *from a tag* ("Use workflow from: Tags > vX.Y.Z") with dry-run unticked to
+#   publish that tag; the Release PR workflow does this after release-plz pushes a tag.
+# * Weekly schedule                    -> dry run of main, so packaging breakage shows up early.
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Build, package and smoke-test only; do not create a GitHub release."
+        required: false
+        default: true
+        type: boolean
+  schedule:
+    - cron: "23 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  RUST_BACKTRACE: short
+  PROFILE: dist
+
+jobs:
+  prepare:
+    name: Verify version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+      publish: ${{ steps.meta.outputs.publish }}
+      ref: ${{ steps.meta.outputs.ref }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Determine version and tag
+        id: meta
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "ferrocord") | .version')
+          semver='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$'
+          [[ $version =~ $semver ]] || { echo "::error::workspace version '$version' is not SemVer"; exit 1; }
+
+          tag=""
+          if [[ $REF_TYPE == tag ]]; then tag=$REF_NAME; fi
+          if [[ -n $tag && $tag != "v$version" ]]; then
+            echo "::error::tag $tag does not match the workspace version $version (expected v$version)"
+            exit 1
+          fi
+
+          publish=false
+          if [[ -n $tag && ( $EVENT == push || ( $EVENT == workflow_dispatch && $INPUT_DRY_RUN == false ) ) ]]; then
+            publish=true
+          fi
+          prerelease=false
+          if [[ $version == *-* ]]; then prerelease=true; fi
+
+          {
+            echo "version=$version"
+            echo "tag=$tag"
+            echo "publish=$publish"
+            echo "prerelease=$prerelease"
+            echo "ref=$(git rev-parse HEAD)"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### Ferrocord $version"
+            echo "- tag: \`${tag:-none (dry run of $REF_NAME)}\`"
+            echo "- commit: \`$(git rev-parse HEAD)\`"
+            echo "- publish: **$publish**, prerelease: **$prerelease**"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+      - name: Render release notes
+        env:
+          TAG: ${{ steps.meta.outputs.tag || format('v{0}', steps.meta.outputs.version) }}
+        run: |
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            bash .github/scripts/release-notes.sh "$TAG" release-notes.md
+          else
+            git cliff --unreleased --tag "$TAG" --strip header --output release-notes.md
+          fi
+          cat release-notes.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: release-notes.md
+          if-no-files-found: error
+
+  ci:
+    name: CI
+    needs: prepare
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-pc-windows-msvc, os: windows-latest }
+          # Native Windows on Arm runner (free for public repositories). Fallback if it is
+          # unavailable: cross-compile on windows-latest (MSVC ARM64 build tools are installed
+          # there too) and drop the arm64 leg of smoke-windows.
+          - { target: aarch64-pc-windows-msvc, os: windows-11-arm }
+          # Oldest supported Ubuntu LTS runner: glibc 2.35 keeps the binaries working on older distros.
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-22.04 }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04-arm }
+          - { target: aarch64-apple-darwin, os: macos-15 }
+          # Cross-compiled on Apple Silicon (Intel runners are being retired); tested under Rosetta.
+          - { target: x86_64-apple-darwin, os: macos-15 }
+    env:
+      FERROCORD_REQUIRE_WINRES: "1"
+      MACOSX_DEPLOYMENT_TARGET: "12.0"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.ref }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: sudo bash packaging/linux/install-build-deps.sh --package
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+          # Caches saved on tags are only visible to that tag; the weekly run on main warms them.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Build
+        shell: bash
+        run: cargo build --locked --profile "$PROFILE" --target ${{ matrix.target }} -p ferrocord
+
+      - name: Stage binary
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          mkdir -p bin
+          case $TARGET in
+            *windows*) cp "target/$TARGET/$PROFILE/ferrocord.exe" bin/ ;;
+            *) cp "target/$TARGET/$PROFILE/ferrocord" bin/ ;;
+          esac
+          ls -l bin
+      - name: Check --version (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # GUI-subsystem binary: capture stdout through a redirected pipe.
+          $p = Start-Process bin/ferrocord.exe -ArgumentList '--version' -NoNewWindow -Wait -PassThru -RedirectStandardOutput version.txt
+          $out = (Get-Content -Raw version.txt).Trim()
+          if ($p.ExitCode -ne 0 -or $out -ne 'ferrocord ${{ needs.prepare.outputs.version }}') { throw "unexpected: '$out' (exit $($p.ExitCode))" }
+          (Get-Item bin/ferrocord.exe).VersionInfo | Format-List ProductName, ProductVersion, FileVersionRaw
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bin-${{ matrix.target }}
+          path: bin/
+          if-no-files-found: error
+
+      - name: Install cargo-deb and cargo-generate-rpm
+        if: runner.os == 'Linux'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deb,cargo-generate-rpm
+      - name: Package (tar.gz, deb, rpm, AppImage)
+        if: runner.os == 'Linux'
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          python3 packaging/linux/stamp-metainfo.py "$VERSION"
+          bash packaging/linux/package.sh ${{ matrix.target }} "$VERSION" dist
+          ls -l dist
+      - uses: actions/upload-artifact@v7
+        if: runner.os == 'Linux'
+        with:
+          name: dist-${{ matrix.target }}
+          path: dist/
+          if-no-files-found: error
+
+  package-windows:
+    name: Package Windows (zip + NSIS installer)
+    needs: [prepare, build]
+    # makensis from the Ubuntu archive: same NSIS for both architectures, and the
+    # x86 installer stub runs natively on x64 and emulated on Windows on Arm.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.ref }}
+          persist-credentials: false
+      - name: Install NSIS
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends nsis zip
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: bin-*-windows-msvc
+      - name: Package
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          bash packaging/windows/package.sh bin-x86_64-pc-windows-msvc/ferrocord.exe "$VERSION" x86_64 dist
+          bash packaging/windows/package.sh bin-aarch64-pc-windows-msvc/ferrocord.exe "$VERSION" arm64 dist
+          ls -l dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-windows
+          path: dist/
+          if-no-files-found: error
+
+  package-macos:
+    name: Package macOS (universal .dmg + .tar.gz)
+    needs: [prepare, build]
+    runs-on: macos-15
+    timeout-minutes: 20
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "12.0"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.ref }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: bin-*-apple-darwin
+      - name: Package
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          # Set to a "Developer ID Application: ..." identity once signing secrets exist.
+          MACOS_SIGN_IDENTITY: "-"
+        run: |
+          chmod +x bin-*/ferrocord
+          bash packaging/macos/package.sh "$VERSION" dist bin-aarch64-apple-darwin/ferrocord bin-x86_64-apple-darwin/ferrocord
+          ls -l dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-macos
+          path: dist/
+          if-no-files-found: error
+
+  smoke-linux:
+    name: Smoke ${{ matrix.case.kind }} on ${{ matrix.case.image }} (${{ matrix.arch }})
+    needs: [prepare, build]
+    runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64, aarch64]
+        case:
+          - { kind: deb, image: "ubuntu:22.04" }
+          - { kind: deb, image: "ubuntu:24.04" }
+          - { kind: deb, image: "debian:12" }
+          - { kind: rpm, image: "fedora:latest" }
+          - { kind: rpm, image: "opensuse/tumbleweed" }
+          - { kind: appimage, image: "ubuntu:22.04" }
+          - { kind: appimage, image: "fedora:latest" }
+          - { kind: tar, image: "ubuntu:24.04" }
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.ref }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist-${{ matrix.arch }}-unknown-linux-gnu
+          path: dist
+      - name: Smoke test in ${{ matrix.case.image }}
+        env:
+          KIND: ${{ matrix.case.kind }}
+          IMAGE: ${{ matrix.case.image }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          case $KIND in
+            deb) artifact=$(ls dist/*.deb) ;;
+            rpm) artifact=$(ls dist/*.rpm) ;;
+            appimage) artifact=$(ls dist/*.AppImage) ;;
+            tar) artifact=$(ls dist/*.tar.gz) ;;
+          esac
+          docker run --rm -v "$PWD:/w" -w /w "$IMAGE" bash packaging/linux/smoke-test.sh "$KIND" "$artifact" "$VERSION"
+
+  smoke-windows:
+    name: Smoke Windows ${{ matrix.arch }}
+    needs: [prepare, package-windows]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64, os: windows-latest }
+          - { arch: arm64, os: windows-11-arm }
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.ref }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist-windows
+          path: dist
+      - name: Smoke test zip and installer
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          ./packaging/windows/smoke-test.ps1 -Version $env:VERSION `
+            -Zip "dist/ferrocord-$env:VERSION-windows-$env:ARCH.zip" `
+            -Installer "dist/ferrocord-$env:VERSION-windows-$env:ARCH-setup.exe"
+
+  smoke-macos:
+    name: Smoke macOS
+    needs: [prepare, package-macos]
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.ref }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist-macos
+          path: dist
+      - name: Smoke test dmg and tar.gz
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          bash packaging/macos/smoke-test.sh "dist/ferrocord-$VERSION-macos-universal.dmg" \
+            "dist/ferrocord-$VERSION-macos-universal.tar.gz" "$VERSION"
+
+  release:
+    name: Publish GitHub release
+    needs: [prepare, ci, build, package-windows, package-macos, smoke-linux, smoke-windows, smoke-macos]
+    if: needs.prepare.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: release
+      url: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ needs.prepare.outputs.tag }}
+    permissions:
+      contents: write # create the release and upload assets
+      id-token: write # sign build provenance (Sigstore)
+      attestations: write # store build provenance
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-notes
+      - name: Checksums
+        working-directory: dist
+        run: |
+          sha256sum -- * | tee ../SHA256SUMS
+          mv ../SHA256SUMS .
+      - name: Build provenance attestation
+        uses: actions/attest@v4
+        with:
+          subject-checksums: dist/SHA256SUMS
+      - name: Create draft release with all assets
+        id: draft
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          name: Ferrocord ${{ needs.prepare.outputs.version }}
+          body_path: release-notes.md
+          draft: true
+          prerelease: ${{ needs.prepare.outputs.prerelease == 'true' }}
+          make_latest: ${{ needs.prepare.outputs.prerelease == 'true' && 'false' || 'true' }}
+          files: dist/*
+          fail_on_unmatched_files: true
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_ID: ${{ steps.draft.outputs.id }}
+        run: |
+          expected=$(find dist -type f | wc -l)
+          uploaded=$(gh api "repos/$GH_REPO/releases/$RELEASE_ID" --jq '.assets | length')
+          if [[ $uploaded -ne $expected ]]; then
+            echo "::error::release has $uploaded assets, expected $expected; leaving it as a draft"
+            exit 1
+          fi
+          gh api -X PATCH "repos/$GH_REPO/releases/$RELEASE_ID" -F draft=false >/dev/null
+          echo "Published ${{ github.server_url }}/$GH_REPO/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"

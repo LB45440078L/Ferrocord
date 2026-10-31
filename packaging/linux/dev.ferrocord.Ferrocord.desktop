@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.4
+Name=Ferrocord
+GenericName=Chat Client
+Comment=Fast, lightweight, open-source Discord client
+Exec=ferrocord
+Icon=dev.ferrocord.Ferrocord
+Terminal=false
+Categories=Network;InstantMessaging;Chat;
+Keywords=discord;chat;messaging;voice;
+StartupNotify=true
+StartupWMClass=dev.ferrocord.Ferrocord
