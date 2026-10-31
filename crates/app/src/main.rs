@@ -13,6 +13,9 @@ mod theme;
 mod views;
 mod widgets;
 
+#[cfg(test)]
+mod tests;
+
 use std::sync::Arc;
 
 use ferrocord_core::{Client, Paths};

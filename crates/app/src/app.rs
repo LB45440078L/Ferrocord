@@ -51,6 +51,10 @@ pub struct ChatScroll {
     pub at_bottom: bool,
     /// Last-read marker captured when the channel was opened ("NEW" divider).
     pub unread_marker: Option<Snowflake>,
+    /// Jump to the newest message on the next frame (e.g. after sending).
+    pub scroll_to_bottom: bool,
+    /// Rows actually laid out last frame (diagnostics and tests).
+    pub rendered_rows: usize,
 }
 
 pub enum Popup {

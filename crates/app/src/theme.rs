@@ -150,9 +150,11 @@ pub fn install_fonts(ctx: &egui::Context) {
     add(&mut fonts, "inter-semibold", include_bytes!("../assets/fonts/Inter-SemiBold.ttf"));
     add(&mut fonts, "inter-italic", include_bytes!("../assets/fonts/Inter-Italic.ttf"));
     add(&mut fonts, "jbmono", include_bytes!("../assets/fonts/JetBrainsMono-Regular.ttf"));
+    add(&mut fonts, "noto-emoji", include_bytes!("../assets/fonts/NotoEmoji.ttf"));
 
-    // Keep egui's bundled emoji/symbol fonts as fallbacks after ours.
-    let fallbacks: Vec<String> = fonts.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
+    // Fallback chain: full monochrome emoji coverage first, then egui's bundled symbol fonts.
+    let mut fallbacks = vec!["noto-emoji".to_string()];
+    fallbacks.extend(fonts.families.get(&FontFamily::Proportional).cloned().unwrap_or_default());
     let chain = |primary: &str| {
         let mut v = vec![primary.to_string()];
         v.extend(fallbacks.iter().cloned());
@@ -161,7 +163,7 @@ pub fn install_fonts(ctx: &egui::Context) {
     fonts.families.insert(FontFamily::Proportional, chain("inter"));
     fonts.families.insert(bold(), chain("inter-semibold"));
     fonts.families.insert(italic(), chain("inter-italic"));
-    let mut mono = vec!["jbmono".to_string()];
+    let mut mono = vec!["jbmono".to_string(), "noto-emoji".to_string()];
     mono.extend(fonts.families.get(&FontFamily::Monospace).cloned().unwrap_or_default());
     fonts.families.insert(FontFamily::Monospace, mono);
     ctx.set_fonts(fonts);

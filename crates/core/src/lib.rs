@@ -9,7 +9,7 @@ mod client;
 pub mod config;
 pub mod extension;
 
-pub use client::{Client, ClientEvent, Notification, error_text};
+pub use client::{Client, ClientEvent, ClientOptions, Notification, error_text};
 pub use config::{Config, Paths, Theme};
 pub use extension::{Extension, Flow, LocalCommand, OutgoingMessage};
 

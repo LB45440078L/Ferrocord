@@ -174,10 +174,14 @@ fn messages(app: &mut App, ui: &mut Ui, channel: Snowflake) {
         }
     };
     let mut acts: Vec<Act> = vec![];
-    let sc_offset = app.scroll.get_mut(&channel).and_then(|s| s.pending_offset.take());
+    let (sc_offset, jump_to_bottom) = match app.scroll.get_mut(&channel) {
+        Some(s) => (s.pending_offset.take(), std::mem::take(&mut s.scroll_to_bottom)),
+        None => (None, false),
+    };
+    repair_scroll_state(ui, channel);
     let mut area = egui::ScrollArea::vertical().id_salt(("chat", channel)).auto_shrink([false, false]).stick_to_bottom(true);
-    if let Some(o) = sc_offset {
-        area = area.vertical_scroll_offset(o);
+    if let Some(o) = sc_offset.filter(|o| o.is_finite()) {
+        area = area.vertical_scroll_offset(o.max(0.0));
     }
     let first_before = rows.first().map(|r| r.id);
     let out = area.show_viewport(ui, |ui, viewport| {
@@ -196,6 +200,7 @@ fn messages(app: &mut App, ui: &mut Ui, channel: Snowflake) {
             acts.push(Act::LoadOlder);
         }
         let mut first_visible: Option<(Snowflake, f32)> = None;
+        let mut rendered = 0usize;
         for row in &rows {
             let top = ui.cursor().min.y;
             let cached = app.scroll.get(&channel).and_then(|sc| sc.heights.get(&row.id).copied());
@@ -210,6 +215,7 @@ fn messages(app: &mut App, ui: &mut Ui, channel: Snowflake) {
             }
             let msg = app.client.store().message(channel, row.id).cloned();
             let Some(msg) = msg else { continue };
+            rendered += 1;
             if row.day_break {
                 ui.add_space(6.0);
                 widgets::divider_label(ui, &msg.created_at().with_timezone(&chrono::Local).format("%B %-d, %Y").to_string(), pal.text_faint, pal.border);
@@ -223,6 +229,11 @@ fn messages(app: &mut App, ui: &mut Ui, channel: Snowflake) {
         }
         typing_line(app, ui, channel);
         ui.add_space(8.0);
+        if jump_to_bottom {
+            // Bounded by egui to the real content height (never overshoots).
+            ui.scroll_to_cursor(Some(egui::Align::BOTTOM));
+        }
+        app.scroll.entry(channel).or_default().rendered_rows = rendered;
         first_visible
     });
 
@@ -230,16 +241,15 @@ fn messages(app: &mut App, ui: &mut Ui, channel: Snowflake) {
     let sc = app.scroll.entry(channel).or_default();
     let max_off = (out.content_size.y - out.inner_rect.height()).max(0.0);
     sc.at_bottom = out.state.clamped_offset().y >= max_off - 4.0;
-    if let (Some((anchor_id, old_y)), Some(first)) = (sc.anchor, first_before) {
-        let _ = first;
-        if let Some((now_id, now_y)) = out.inner
-            && now_id == anchor_id
-            && (now_y - old_y).abs() > 1.0
-            && !sc.at_bottom
-        {
-            sc.pending_offset = Some(out.state.clamped_offset().y + (now_y - old_y));
-            ui.ctx().request_repaint();
-        }
+    if first_before.is_some()
+        && let (Some((anchor_id, old_y)), Some((now_id, now_y))) = (sc.anchor, out.inner)
+        && now_id == anchor_id
+        && (now_y - old_y).abs() > 1.0
+        && !sc.at_bottom
+    {
+        let target = (out.state.clamped_offset().y + (now_y - old_y)).clamp(0.0, max_off);
+        sc.pending_offset = Some(target);
+        ui.ctx().request_repaint();
     }
     sc.anchor = out.inner;
 
@@ -250,6 +260,25 @@ fn messages(app: &mut App, ui: &mut Ui, channel: Snowflake) {
         }
     }
     apply_acts(app, channel, acts);
+}
+
+/// Resets a persisted scroll state that holds a non-finite or absurd offset.
+/// Such a state renders nothing and would otherwise survive channel switches.
+pub(crate) fn repair_scroll_state(ui: &Ui, channel: Snowflake) {
+    let id = ui.make_persistent_id(("chat", channel));
+    if let Some(mut st) = egui::scroll_area::State::load(ui.ctx(), id)
+        && !scroll_state_is_sane(&st)
+    {
+        tracing::warn!(%channel, "repairing corrupted chat scroll state");
+        st = egui::scroll_area::State::default();
+        st.store(ui.ctx(), id);
+    }
+}
+
+fn scroll_state_is_sane(st: &egui::scroll_area::State) -> bool {
+    let (off, vel) = (st.unclamped_offset(), st.velocity());
+    // Legitimate rubber-banding overscroll is a few hundred points at most.
+    off.is_finite() && vel.is_finite() && (off - st.clamped_offset()).length() < 10_000.0
 }
 
 fn channel_intro(app: &App, ui: &mut Ui, channel: Snowflake) {
@@ -1158,6 +1187,7 @@ fn submit(app: &mut App, channel: Snowflake) {
     if text.is_empty() && files.is_empty() {
         return;
     }
+    app.scroll.entry(channel).or_default().scroll_to_bottom = true;
     if app.demo {
         crate::demo::local_send(&app.client, channel, text);
         return;
@@ -1170,7 +1200,6 @@ fn submit(app: &mut App, channel: Snowflake) {
         })
         .collect();
     app.client.send_message(channel, text, reply, mention, parts);
-    app.scroll.entry(channel).or_default().pending_offset = Some(f32::MAX);
 }
 
 #[derive(Clone)]

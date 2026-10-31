@@ -83,6 +83,26 @@ pub struct Notification {
     pub icon_url: Option<String>,
 }
 
+/// Construction options for [`Client`].
+#[derive(Debug, Clone)]
+pub struct ClientOptions {
+    /// Fetch the live web client build number on startup (network access).
+    pub refresh_build_number: bool,
+}
+
+impl Default for ClientOptions {
+    fn default() -> Self {
+        Self { refresh_build_number: true }
+    }
+}
+
+impl ClientOptions {
+    /// No background network activity: for tests and offline demos.
+    pub fn offline() -> Self {
+        Self { refresh_build_number: false }
+    }
+}
+
 type Repaint = Arc<dyn Fn() + Send + Sync>;
 /// Lazy-guild subscription: the channel whose member list we follow, and its row ranges.
 type Subscription = (Snowflake, Vec<[u32; 2]>);
@@ -116,6 +136,11 @@ pub struct Client {
 impl Client {
     /// Creates a client bound to a Tokio runtime handle.
     pub fn new(rt: tokio::runtime::Handle, paths: Paths) -> Self {
+        Self::with_options(rt, paths, ClientOptions::default())
+    }
+
+    /// Creates a client with explicit options (used by tests and embedders).
+    pub fn with_options(rt: tokio::runtime::Handle, paths: Paths, options: ClientOptions) -> Self {
         paths.ensure();
         let config = Config::load(&paths);
         let http = Http::new(ferrocord_http::ClientProfile::desktop());
@@ -140,11 +165,13 @@ impl Client {
             }),
         };
         client.add_extension(Arc::new(crate::extension::BuiltinCommands));
-        // Track the live client build so our fingerprint never goes stale.
-        let http = client.inner.http.clone();
-        client.inner.rt.spawn(async move {
-            http.refresh_build_number().await;
-        });
+        if options.refresh_build_number {
+            // Track the live client build so our fingerprint never goes stale.
+            let http = client.inner.http.clone();
+            client.inner.rt.spawn(async move {
+                http.refresh_build_number().await;
+            });
+        }
         client
     }
 
