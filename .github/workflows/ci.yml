@@ -144,6 +144,8 @@ jobs:
       - name: PSScriptAnalyzer (Windows scripts)
         shell: pwsh
         run: |
+          # Some runner images ship without the PSGallery registration.
+          if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) { Register-PSRepository -Default }
           Set-PSRepository PSGallery -InstallationPolicy Trusted
           Install-Module PSScriptAnalyzer -RequiredVersion 1.24.0 -Scope CurrentUser
           $issues = Get-ChildItem packaging, scripts -Recurse -Filter *.ps1 |
