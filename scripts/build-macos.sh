@@ -122,7 +122,7 @@ for a in "${ARCHS[@]}"; do
 done
 for t in "${targets[@]}"; do
   if ! rustup target list --installed | grep -qx "$t"; then
-    step "Adding the Rust target $t…"
+    step "Adding the Rust target ${t}…"
     rustup target add "$t" > /dev/null || die "Could not add the Rust target $t."
   fi
 done
@@ -154,7 +154,7 @@ hint "The first build downloads and compiles everything: expect 5-20 minutes."
 declare -a done_archs=() failed_archs=()
 for i in "${!ARCHS[@]}"; do
   a=${ARCHS[$i]} t=${targets[$i]}
-  step "Compiling for $a…"
+  step "Compiling for ${a}…"
   build_start=$(date +%s)
   if cargo build --locked --profile "$PROFILE" --target "$t" -p ferrocord; then
     ok "Built for $a in $(($(date +%s) - build_start)) s"
@@ -175,8 +175,8 @@ for i in "${!ARCHS[@]}"; do
 done
 
 title "🏁 Summary"
-for a in "${done_archs[@]}"; do ok "ferrocord-$version-macos-$a.dmg"; done
-for a in "${failed_archs[@]}"; do fail "$a"; done
+for a in ${done_archs[@]+"${done_archs[@]}"}; do ok "ferrocord-$version-macos-$a.dmg"; done
+for a in ${failed_archs[@]+"${failed_archs[@]}"}; do fail "$a"; done
 echo
 printf '%s📂 %s%s\n' "$BOLD" "$OUT" "$RESET"
 shopt -s nullglob

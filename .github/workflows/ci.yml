@@ -129,6 +129,18 @@ jobs:
         run: docker run --rm -v "$PWD:/repo" --workdir /repo rhysd/actionlint:1.7.12 -color
       - name: shellcheck packaging scripts
         run: shellcheck --severity=style packaging/*/*.sh scripts/*.sh .github/scripts/*.sh
+      - name: macOS scripts work with the system bash (3.2)
+        run: |
+          # macOS ships bash 3.2. There, "$name…" reads the UTF-8 bytes of "…" as part
+          # of the variable name (write "${name}…"), and an empty "${arr[@]}" fails
+          # under `set -u` (write ${arr[@]+"${arr[@]}"}).
+          if grep -nP '\$[A-Za-z_][A-Za-z0-9_]*[^\x00-\x7F]' packaging/*/*.sh scripts/*.sh .github/scripts/*.sh; then
+            echo "::error::put braces around variables followed by non-ASCII text, e.g. \${name}…"
+            exit 1
+          fi
+          for f in scripts/build-macos.sh packaging/macos/*.sh; do
+            docker run --rm -v "$PWD:/repo" --workdir /repo bash:3.2 bash -n "$f"
+          done
       - name: PSScriptAnalyzer (Windows scripts)
         shell: pwsh
         run: |
