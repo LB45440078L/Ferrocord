@@ -27,3 +27,5 @@ api-token.txt
 /scratch/
 *.asar
 /dist/
+__pycache__/
+*.pyc
