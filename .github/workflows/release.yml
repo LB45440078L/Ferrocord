@@ -96,8 +96,11 @@ jobs:
       - name: Render release notes
         env:
           TAG: ${{ steps.meta.outputs.tag || format('v{0}', steps.meta.outputs.version) }}
+          # Only a run for the tag itself has it checked out; a dry run on a branch may find
+          # an existing tag of the same version elsewhere in history and previews instead.
+          TAGGED_RUN: ${{ steps.meta.outputs.tag != '' }}
         run: |
-          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+          if [[ $TAGGED_RUN == true ]]; then
             bash .github/scripts/release-notes.sh "$TAG" release-notes.md
           else
             git cliff --unreleased --tag "$TAG" --strip header --output release-notes.md
