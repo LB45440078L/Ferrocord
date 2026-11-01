@@ -19,7 +19,8 @@ size = None
 
 files = [app]
 symlinks = {"Applications": "/Applications"}
-hide_extensions = [app_name]
+# No hide_extensions: it sets a com.apple.FinderInfo xattr on the signed bundle, which
+# breaks `codesign --verify --strict` (and Gatekeeper). Finder hides ".app" anyway.
 icon = defines["icon"]  # noqa: F821  volume icon shown in Finder and on the desktop
 
 # A PNG; dmgbuild finds background@2x.png beside it and combines both into one HiDPI TIFF.
